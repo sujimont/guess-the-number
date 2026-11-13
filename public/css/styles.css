@@ -101,8 +101,8 @@ button, input, .keypad-btn, .scratchpad-pill {
 
 /* App Layout Container */
 .app-container {
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding-top: var(--safe-top);
@@ -110,6 +110,7 @@ button, input, .keypad-btn, .scratchpad-pill {
   max-width: 640px;
   margin: 0 auto;
   position: relative;
+  overflow: hidden;
 }
 
 /* Top App Header */
@@ -124,6 +125,7 @@ button, input, .keypad-btn, .scratchpad-pill {
   position: sticky;
   top: 0;
   z-index: 50;
+  flex-shrink: 0;
 }
 
 .header-logo {
@@ -168,21 +170,38 @@ button, input, .keypad-btn, .scratchpad-pill {
 /* Screens Wrapper */
 .screens-wrapper {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  overflow-y: auto;
+  padding: 6px 8px;
+  overflow: hidden;
 }
 
 .screen {
   display: none;
   flex-direction: column;
   width: 100%;
-  animation: fadeIn 0.2s ease-out;
+  height: 100%;
+  min-height: 0;
+  animation: fadeIn 0.15s ease-out;
 }
 
 .screen.active {
   display: flex;
+}
+
+#screen-home,
+#screen-waiting,
+#screen-setup,
+#screen-gameover {
+  overflow-y: auto;
+}
+
+#screen-game {
+  overflow: hidden;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 @keyframes fadeIn {
@@ -871,33 +890,40 @@ p.hero-desc {
   display: none;
 }
 
-/* History Boards: Side-by-side */
+/* History Boards: Side-by-side (fills all available middle space) */
 .boards-mobile-tabs {
   display: none !important;
 }
 
 .boards-container.compact-boards {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-bottom: 2px;
+  gap: 5px;
+  margin-bottom: 3px;
 }
 
 .board-column {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 3px 5px;
+  padding: 4px 6px;
+  overflow: hidden;
 }
 
 .board-column-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 2px;
-  margin-bottom: 2px;
+  padding-bottom: 3px;
+  margin-bottom: 3px;
 }
 
 .col-header-left {
@@ -935,9 +961,10 @@ p.hero-desc {
 }
 
 .history-list {
-  height: 250px;
-  max-height: 250px;
-  min-height: 220px;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
   overflow-y: auto;
   display: flex;
   flex-direction: column; /* Chronological order */
@@ -949,8 +976,9 @@ p.hero-desc {
 .empty-history-placeholder {
   text-align: center;
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   padding: 24px 4px;
+  margin: auto 0;
 }
 
 .guess-row {
@@ -1018,6 +1046,7 @@ p.hero-desc {
 
 /* Interactive Digit Scratchpad */
 .scratchpad-wrapper {
+  flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -1058,12 +1087,12 @@ p.hero-desc {
 }
 
 .scratchpad-pill {
-  height: 24px;
+  height: clamp(26px, 3.8vh, 32px);
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-color);
   border-radius: 3px;
   font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: var(--text-main);
   display: flex;
@@ -1103,8 +1132,9 @@ p.hero-desc {
 }
 
 .guess-input-panel.compact {
-  padding: 4px 6px;
-  margin-top: 2px;
+  flex-shrink: 0;
+  padding: 4px 6px 6px 6px;
+  margin-top: auto;
 }
 
 .guess-input-row {
@@ -1131,22 +1161,43 @@ p.hero-desc {
 }
 
 .digit-boxes-container.compact .digit-box {
-  width: 32px;
-  height: 34px;
-  font-size: 1.15rem;
+  width: clamp(36px, 10vw, 44px);
+  height: clamp(38px, 5.5vh, 44px);
+  font-size: 1.35rem;
+  font-weight: 800;
   border-radius: 4px;
 }
 
 .compact-numpad {
-  margin-top: 1px;
-  gap: 3px;
+  margin-top: 2px;
+  gap: 4px;
   max-width: 100%;
 }
 
 .compact-numpad .keypad-btn {
-  height: 28px;
-  font-size: 1rem;
-  border-radius: 4px;
+  height: clamp(42px, 5.8vh, 52px);
+  font-size: 1.35rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.08s ease;
+}
+
+.compact-numpad .keypad-btn:active {
+  background: var(--primary-glow);
+  border-color: var(--primary);
+  transform: scale(0.96);
+}
+
+.compact-numpad .keypad-btn-special {
+  font-size: 1.05rem;
+  color: var(--text-muted);
 }
 
 /* SCREEN 5: Game Over */
@@ -1314,11 +1365,16 @@ p.hero-desc {
   }
 
   .board-column {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
   }
 
   .history-list {
-    height: 250px;
-    max-height: 250px;
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-height: none;
   }
 }
