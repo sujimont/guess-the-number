@@ -1,5 +1,7 @@
 # 🎯 Guess The Number — Online Multiplayer Code Breaker
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sujimont/guess-the-number)
+
 A real-time, 2-player online number-guessing web game built with Node.js, Express, and Socket.IO. Players select a secret 4- or 5-digit number and take turns cracking each other's code with automated server-side feedback.
 
 ---
