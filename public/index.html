@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Guess The Number — Online Multiplayer Code Breaker</title>
+  <meta name="description" content="A real-time 2-player number-guessing web game. Pick a secret code, take turns guessing, and crack the opponent's number!">
+  <!-- Theme Color for iOS Safari / Android Chrome -->
+  <meta name="theme-color" content="#0f172a" id="meta-theme-color">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="dark-theme">
+  <div id="app" class="app-container">
+    <!-- Top Global Bar -->
+    <header class="app-header">
+      <div class="header-logo">
+        <span class="logo-icon">🎯</span>
+        <span class="logo-text">GuessTheNumber</span>
+      </div>
+      <div class="header-controls">
+        <button id="btn-sound-toggle" class="icon-btn" aria-label="Toggle Sound" title="Sound Effects">
+          <span id="sound-icon">🔊</span>
+        </button>
+        <button id="btn-theme-toggle" class="icon-btn" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Screens Container -->
+    <main class="screens-wrapper">
+      
+      <!-- SCREEN 1: Home / Lobby -->
+      <section id="screen-home" class="screen active">
+        <div class="card hero-card">
+          <div class="badge-tag">2-Player Real-time & Solo</div>
+          <h1 class="hero-title">Crack the Secret Number</h1>
+          <p class="hero-desc">Create a room, pick your secret code, and take turns cracking your opponent's number!</p>
+
+          <div class="form-group name-group">
+            <label for="player-name-input">Your Display Name</label>
+            <input 
+              type="text" 
+              id="player-name-input" 
+              class="text-input" 
+              placeholder="Enter your name..." 
+              maxlength="16" 
+              autocomplete="name"
+              autocapitalize="words"
+            >
+          </div>
+
+          <div class="home-actions">
+            <button id="btn-show-create" class="btn btn-primary btn-large">
+              <span>🚀</span> Create Online Game
+            </button>
+            <button id="btn-show-join" class="btn btn-secondary btn-large">
+              <span>🔑</span> Join with Game Code
+            </button>
+            <button id="btn-play-ai" class="btn btn-accent btn-large">
+              <span>🤖</span> Practice vs Computer
+            </button>
+          </div>
+        </div>
+
+        <!-- Create Game Modal / Card -->
+        <div id="modal-create-game" class="modal-overlay hidden">
+          <div class="card modal-card">
+            <div class="modal-header">
+              <h2>Create New Game</h2>
+              <button class="btn-close modal-close" aria-label="Close">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+              <!-- Digit Count Setting -->
+              <div class="form-group">
+                <label>Number of Digits</label>
+                <div class="segmented-control" id="digits-selector">
+                  <button type="button" class="segment-btn active" data-digits="4">4 Digits</button>
+                  <button type="button" class="segment-btn" data-digits="5">5 Digits</button>
+                </div>
+              </div>
+
+              <!-- Scoring Mode Setting -->
+              <div class="form-group">
+                <label>Scoring Method</label>
+                <div class="segmented-control segmented-vertical" id="mode-selector">
+                  <button type="button" class="segment-btn active" data-mode="exact">
+                    <div class="btn-line-title">Exact Matches Only</div>
+                    <div class="btn-line-sub">Tells how many digits are correct and in the right position</div>
+                  </button>
+                  <button type="button" class="segment-btn" data-mode="bulls_and_cows">
+                    <div class="btn-line-title">Bulls & Cows</div>
+                    <div class="btn-line-sub">Bulls = correct position; Cows = right digit, wrong position</div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Repeated Digits Setting -->
+              <div class="form-group">
+                <label>Repeated Digits</label>
+                <div class="segmented-control" id="duplicates-selector">
+                  <button type="button" class="segment-btn active" data-duplicates="false">Unique Only (No repeats)</button>
+                  <button type="button" class="segment-btn" data-duplicates="true">Duplicates Allowed</button>
+                </div>
+              </div>
+
+              <!-- Turn Timer Setting -->
+              <div class="form-group">
+                <label>Turn Time Limit</label>
+                <div class="segmented-control" id="timer-selector">
+                  <button type="button" class="segment-btn active" data-timer="90">90 Seconds Timer</button>
+                  <button type="button" class="segment-btn" data-timer="0">No Time Limit</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button id="btn-confirm-create" class="btn btn-primary btn-block">Start Room</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Join Game Modal / Card -->
+        <div id="modal-join-game" class="modal-overlay hidden">
+          <div class="card modal-card">
+            <div class="modal-header">
+              <h2>Join Online Game</h2>
+              <button class="btn-close modal-close" aria-label="Close">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="join-room-code-input">6-Character Game Code</label>
+                <input 
+                  type="text" 
+                  id="join-room-code-input" 
+                  class="text-input code-input" 
+                  placeholder="e.g. AB9X2K" 
+                  maxlength="6"
+                  autocapitalize="characters"
+                  autocomplete="off"
+                  spellcheck="false"
+                >
+                <div class="input-hint">Enter the code shared by your friend</div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button id="btn-confirm-join" class="btn btn-primary btn-block">Enter Game</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2: Waiting Room / Lobby -->
+      <section id="screen-waiting" class="screen">
+        <div class="card waiting-card">
+          <div class="waiting-header">
+            <span class="pulse-dot"></span>
+            <h2>Waiting for Opponent...</h2>
+          </div>
+
+          <p class="waiting-instruction">Share this Game Code or invite link with your friend to start playing:</p>
+
+          <div class="code-box">
+            <span id="display-room-code" class="huge-code">------</span>
+            <button id="btn-copy-code" class="btn btn-small btn-secondary" title="Copy Code">
+              📋 Copy Code
+            </button>
+          </div>
+
+          <div class="share-actions">
+            <button id="btn-copy-link" class="btn btn-primary btn-block">
+              🔗 Copy Direct Invite Link
+            </button>
+          </div>
+
+          <div class="game-rules-summary" id="waiting-rules-summary">
+            <!-- Dynamic summary tags inserted by JS -->
+          </div>
+
+          <div class="player-roster">
+            <div class="roster-item" id="roster-player-0">
+              <div class="roster-avatar">👑</div>
+              <div class="roster-info">
+                <span class="roster-name" id="roster-name-0">Host</span>
+                <span class="roster-badge badge-ready">Connected</span>
+              </div>
+            </div>
+            <div class="roster-item waiting-peer" id="roster-player-1">
+              <div class="roster-avatar">⏳</div>
+              <div class="roster-info">
+                <span class="roster-name" id="roster-name-1">Waiting for player 2...</span>
+                <span class="roster-badge badge-pending">Waiting...</span>
+              </div>
+            </div>
+          </div>
+
+          <button id="btn-leave-waiting" class="btn btn-text btn-block">Cancel & Leave Room</button>
+        </div>
+      </section>
+
+      <!-- SCREEN 3: Secret Number Selection -->
+      <section id="screen-setup" class="screen">
+        <div class="card setup-card">
+          <div class="badge-tag">Secret Selection Phase</div>
+          <h2 class="setup-title">Choose Your Secret Code</h2>
+          <p class="setup-subtitle" id="setup-rules-desc">
+            Pick a 4-digit secret number. Your opponent will have to guess this!
+          </p>
+
+          <!-- Digit Display Boxes -->
+          <div class="digit-boxes-container" id="secret-boxes">
+            <!-- Dynamically populated (4 or 5 boxes) -->
+          </div>
+
+          <!-- Live Rule Warning -->
+          <div id="secret-validation-msg" class="validation-msg"></div>
+
+          <!-- Lock In Button -->
+          <button id="btn-lock-secret" class="btn btn-primary btn-large btn-block" disabled>
+            🔒 Lock In Secret Number
+          </button>
+
+          <!-- On-Screen Numpad for mobile / touch -->
+          <div class="numpad-container" id="setup-numpad">
+            <!-- 0-9 digits, backspace, clear -->
+          </div>
+
+          <!-- Opponent Status -->
+          <div class="opponent-ready-banner" id="setup-opponent-status">
+            <span class="spinner-tiny"></span> Opponent is selecting their secret code...
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4: Active Game Board -->
+      <section id="screen-game" class="screen">
+        <!-- Game Top Status Bar -->
+        <div class="game-top-bar">
+          <div class="game-info-chips">
+            <span class="chip chip-code">Code: <b id="game-code-chip">------</b></span>
+            <span class="chip chip-mode" id="game-mode-chip">Exact Matches</span>
+          </div>
+
+          <div class="timer-container" id="game-timer-container">
+            <div class="timer-ring">
+              <span id="timer-text">90</span>s
+            </div>
+          </div>
+        </div>
+
+        <!-- Turn Announcement Banner -->
+        <div id="turn-banner" class="turn-banner my-turn">
+          <span id="turn-banner-icon">🎯</span>
+          <span id="turn-banner-text">Your Turn! Guess opponent's number</span>
+        </div>
+
+        <!-- Equal Turn / Critical Alert Banner -->
+        <div id="special-notice-banner" class="special-banner hidden"></div>
+
+        <!-- History Boards: Desktop side-by-side / Mobile tabbed -->
+        <div class="boards-container">
+          <div class="boards-mobile-tabs">
+            <button type="button" class="tab-btn active" id="tab-my-board">
+              My Guesses <span class="tab-count" id="count-my-guesses">0</span>
+            </button>
+            <button type="button" class="tab-btn" id="tab-opp-board">
+              Opponent's Guesses <span class="tab-count" id="count-opp-guesses">0</span>
+            </button>
+          </div>
+
+          <!-- My Guesses Board -->
+          <div class="board-column active" id="board-my">
+            <div class="board-column-header">
+              <h3>🎯 My Guesses</h3>
+              <span class="board-subtitle">Cracking opponent's code</span>
+            </div>
+            <div class="history-list" id="my-history-list">
+              <div class="empty-history-placeholder">No guesses made yet. Make your first guess below!</div>
+            </div>
+          </div>
+
+          <!-- Opponent's Guesses Board -->
+          <div class="board-column" id="board-opp">
+            <div class="board-column-header">
+              <h3>🛡️ Opponent's Guesses</h3>
+              <span class="board-subtitle">Attacking your code</span>
+            </div>
+            <div class="history-list" id="opp-history-list">
+              <div class="empty-history-placeholder">Opponent hasn't made any guesses yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Digit Deduction Scratchpad -->
+        <div class="scratchpad-wrapper">
+          <div class="scratchpad-header">
+            <div>
+              <span class="scratchpad-title">📝 Digit Tracker</span>
+              <span class="scratchpad-hint">Tap to mark: ⚪ Neutral → 🟢 Likely → 🔴 Ruled Out</span>
+            </div>
+            <button id="btn-clear-scratchpad" class="btn-text-small">Reset All</button>
+          </div>
+          <div class="scratchpad-keys" id="scratchpad-keys">
+            <!-- 0 through 9 keys -->
+          </div>
+        </div>
+
+        <!-- Guess Input Area & Mobile Numpad -->
+        <div class="guess-input-panel" id="guess-input-panel">
+          <div class="guess-input-row">
+            <div class="digit-boxes-container compact" id="guess-boxes">
+              <!-- Dynamically populated guess boxes -->
+            </div>
+            <button id="btn-submit-guess" class="btn btn-primary" disabled>
+              Guess
+            </button>
+          </div>
+
+          <!-- Built-in Mobile Numpad -->
+          <div class="numpad-container compact-numpad" id="game-numpad">
+            <!-- 0-9 digits + Backspace + Submit -->
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: Game Over -->
+      <section id="screen-gameover" class="screen">
+        <div class="card gameover-card">
+          <div class="gameover-trophy" id="gameover-trophy">🏆</div>
+          <h1 id="gameover-title" class="gameover-title">Victory!</h1>
+          <p id="gameover-reason" class="gameover-reason">You cracked the opponent's code!</p>
+
+          <div class="secrets-reveal-box">
+            <div class="secret-reveal-card" id="reveal-my-secret">
+              <span class="reveal-label">Your Secret:</span>
+              <span class="reveal-number" id="reveal-my-val">----</span>
+            </div>
+            <div class="secret-reveal-card" id="reveal-opp-secret">
+              <span class="reveal-label">Opponent's Secret:</span>
+              <span class="reveal-number" id="reveal-opp-val">----</span>
+            </div>
+          </div>
+
+          <div class="gameover-stats">
+            <div class="stat-item">
+              <span class="stat-val" id="stat-rounds">0</span>
+              <span class="stat-lbl">Rounds</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-val" id="stat-guesses">0</span>
+              <span class="stat-lbl">Your Guesses</span>
+            </div>
+          </div>
+
+          <div class="gameover-actions">
+            <button id="btn-play-again" class="btn btn-primary btn-large btn-block">
+              🔄 Play Again (Rematch)
+            </button>
+            <button id="btn-return-home" class="btn btn-secondary btn-block">
+              🏠 Back to Home Menu
+            </button>
+          </div>
+
+          <div id="rematch-waiting-notice" class="rematch-notice hidden">
+            <span class="spinner-tiny"></span> Waiting for opponent to accept rematch...
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Global Floating Toast Notification -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- Audio, Deduction Scratchpad, Socket, and Application Scripts -->
+  <script src="js/sound.js"></script>
+  <script src="js/scratchpad.js"></script>
+  <script src="js/socketClient.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
