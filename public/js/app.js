@@ -114,6 +114,17 @@
   const btnReturnHome = document.getElementById('btn-return-home');
   const rematchWaitingNotice = document.getElementById('rematch-waiting-notice');
 
+  // Match Review Breakdown Elements
+  const btnTabMyReview = document.getElementById('btn-tab-my-review');
+  const btnTabOppReview = document.getElementById('btn-tab-opp-review');
+  const btnTabBothReview = document.getElementById('btn-tab-both-review');
+  const reviewMyCount = document.getElementById('review-my-count');
+  const reviewOppCount = document.getElementById('review-opp-count');
+  const reviewTargetCode = document.getElementById('review-target-code');
+  const reviewTargetBanner = document.getElementById('review-target-banner');
+  const reviewList = document.getElementById('review-list');
+  const btnViewBoard = document.getElementById('btn-view-board');
+
   // Toast Container
   const toastContainer = document.getElementById('toast-container');
 
@@ -447,6 +458,30 @@
     if (btnSubmitGuess) {
       btnSubmitGuess.addEventListener('click', () => {
         submitCurrentGuess();
+      });
+    }
+
+    // View Full Game Board Button
+    if (btnViewBoard) {
+      btnViewBoard.addEventListener('click', () => {
+        switchScreen('game');
+        if (specialNoticeBanner) {
+          specialNoticeBanner.className = 'special-banner gameover-banner';
+          specialNoticeBanner.innerHTML = `
+            <span>🏁 Match Concluded</span>
+            <button type="button" id="btn-back-to-results" class="btn btn-primary" style="padding: 2px 10px; font-size: 0.72rem; border-radius: 4px;">
+              View Review & Rematch ➔
+            </button>
+          `;
+          specialNoticeBanner.classList.remove('hidden');
+
+          const btnBack = document.getElementById('btn-back-to-results');
+          if (btnBack) {
+            btnBack.addEventListener('click', () => {
+              switchScreen('gameover');
+            });
+          }
+        }
       });
     }
 
@@ -912,6 +947,202 @@
   }
 
   /* ==========================================================================
+     Post-Game Analysis & Guess Breakdown
+     ========================================================================== */
+  function analyzeGuessAgainstSecret(guess, targetSecret, mode) {
+    if (!targetSecret) return [];
+    const result = [];
+    const secretLen = targetSecret.length;
+
+    // Remaining occurrences of each character in secret
+    const secretRemaining = {};
+    for (let i = 0; i < secretLen; i++) {
+      const ch = targetSecret[i];
+      secretRemaining[ch] = (secretRemaining[ch] || 0) + 1;
+    }
+
+    // Step 1: Mark exact matches
+    const isExact = new Array(guess.length).fill(false);
+    for (let i = 0; i < guess.length; i++) {
+      if (i < secretLen && guess[i] === targetSecret[i]) {
+        isExact[i] = true;
+        secretRemaining[guess[i]]--;
+      }
+    }
+
+    // Step 2: Mark remaining digits (wrong-pos vs miss)
+    for (let i = 0; i < guess.length; i++) {
+      const digit = guess[i];
+      if (isExact[i]) {
+        result.push({ digit, status: 'exact', label: 'Correct position' });
+      } else if (secretRemaining[digit] > 0) {
+        secretRemaining[digit]--;
+        result.push({ digit, status: 'wrong-pos', label: 'In code, wrong position' });
+      } else {
+        result.push({ digit, status: 'miss', label: 'Not in secret code' });
+      }
+    }
+
+    return result;
+  }
+
+  function renderGuessReviewItem(guessRecord, targetSecret, mode) {
+    const item = document.createElement('div');
+    const isWin = Boolean(guessRecord.feedback && guessRecord.feedback.isWin);
+    item.className = `review-guess-item ${isWin ? 'winning-guess' : ''}`;
+
+    const analyzedDigits = analyzeGuessAgainstSecret(guessRecord.guess, targetSecret, mode);
+
+    let digitsHtml = '';
+    analyzedDigits.forEach(d => {
+      const cls = d.status === 'exact' ? 'digit-exact' : d.status === 'wrong-pos' ? 'digit-wrong-pos' : 'digit-miss';
+      digitsHtml += `<span class="digit-chip ${cls}" title="${d.digit}: ${d.label}">${d.digit}</span>`;
+    });
+
+    let badgesHtml = '';
+    if (guessRecord.feedback.mode === 'exact') {
+      badgesHtml = `<span class="badge-feedback badge-exact">${guessRecord.feedback.exact} Exact</span>`;
+    } else {
+      badgesHtml = `
+        <span class="badge-feedback badge-bulls">${guessRecord.feedback.bulls}B</span>
+        <span class="badge-feedback badge-cows">${guessRecord.feedback.cows}C</span>
+      `;
+    }
+
+    if (isWin) {
+      badgesHtml += `<span class="win-badge-tag">🏆 CRACKED!</span>`;
+    }
+
+    item.innerHTML = `
+      <div class="review-guess-left">
+        <span class="review-turn-num">#${guessRecord.turnNumber}</span>
+        <div class="review-digits-chips">${digitsHtml}</div>
+      </div>
+      <div class="review-feedback-badges">${badgesHtml}</div>
+    `;
+
+    return item;
+  }
+
+  function renderGameOverReview(mySecret, oppSecret) {
+    if (!reviewList) return;
+
+    let currentReviewTab = 'my';
+    if (reviewMyCount) reviewMyCount.textContent = state.guesses.my.length;
+    if (reviewOppCount) reviewOppCount.textContent = state.guesses.opp.length;
+
+    function updateReviewDisplay() {
+      reviewList.innerHTML = '';
+
+      if (currentReviewTab === 'my') {
+        if (reviewTargetBanner) {
+          reviewTargetBanner.style.display = 'block';
+          reviewTargetBanner.innerHTML = `🎯 Opponent's Secret Code to Crack: <b id="review-target-code">${oppSecret || '----'}</b>`;
+        }
+
+        if (state.guesses.my.length === 0) {
+          reviewList.innerHTML = '<div class="empty-history-placeholder">No guesses were made.</div>';
+          return;
+        }
+
+        state.guesses.my.forEach(g => {
+          reviewList.appendChild(renderGuessReviewItem(g, oppSecret, state.roomConfig.mode));
+        });
+      } else if (currentReviewTab === 'opp') {
+        if (reviewTargetBanner) {
+          reviewTargetBanner.style.display = 'block';
+          reviewTargetBanner.innerHTML = `🛡️ Your Secret Code (Attacked): <b id="review-target-code">${mySecret || '----'}</b>`;
+        }
+
+        if (state.guesses.opp.length === 0) {
+          reviewList.innerHTML = '<div class="empty-history-placeholder">Opponent made no guesses.</div>';
+          return;
+        }
+
+        state.guesses.opp.forEach(g => {
+          reviewList.appendChild(renderGuessReviewItem(g, mySecret, state.roomConfig.mode));
+        });
+      } else {
+        // Both side-by-side
+        if (reviewTargetBanner) {
+          reviewTargetBanner.style.display = 'none';
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'review-both-grid';
+
+        const colMy = document.createElement('div');
+        colMy.innerHTML = `
+          <div class="review-col-title">
+            <span>🎯 You (${oppSecret || '----'})</span>
+            <span>${state.guesses.my.length}</span>
+          </div>
+        `;
+        const listMy = document.createElement('div');
+        listMy.className = 'review-sublist';
+        if (state.guesses.my.length === 0) {
+          listMy.innerHTML = '<div class="empty-history-placeholder">None</div>';
+        } else {
+          state.guesses.my.forEach(g => listMy.appendChild(renderGuessReviewItem(g, oppSecret, state.roomConfig.mode)));
+        }
+        colMy.appendChild(listMy);
+
+        const colOpp = document.createElement('div');
+        colOpp.innerHTML = `
+          <div class="review-col-title">
+            <span>🛡️ Opponent (${mySecret || '----'})</span>
+            <span>${state.guesses.opp.length}</span>
+          </div>
+        `;
+        const listOpp = document.createElement('div');
+        listOpp.className = 'review-sublist';
+        if (state.guesses.opp.length === 0) {
+          listOpp.innerHTML = '<div class="empty-history-placeholder">None</div>';
+        } else {
+          state.guesses.opp.forEach(g => listOpp.appendChild(renderGuessReviewItem(g, mySecret, state.roomConfig.mode)));
+        }
+        colOpp.appendChild(listOpp);
+
+        grid.appendChild(colMy);
+        grid.appendChild(colOpp);
+        reviewList.appendChild(grid);
+      }
+    }
+
+    if (btnTabMyReview) {
+      btnTabMyReview.onclick = () => {
+        currentReviewTab = 'my';
+        btnTabMyReview.classList.add('active');
+        if (btnTabOppReview) btnTabOppReview.classList.remove('active');
+        if (btnTabBothReview) btnTabBothReview.classList.remove('active');
+        updateReviewDisplay();
+      };
+    }
+
+    if (btnTabOppReview) {
+      btnTabOppReview.onclick = () => {
+        currentReviewTab = 'opp';
+        btnTabOppReview.classList.add('active');
+        if (btnTabMyReview) btnTabMyReview.classList.remove('active');
+        if (btnTabBothReview) btnTabBothReview.classList.remove('active');
+        updateReviewDisplay();
+      };
+    }
+
+    if (btnTabBothReview) {
+      btnTabBothReview.onclick = () => {
+        currentReviewTab = 'both';
+        btnTabBothReview.classList.add('active');
+        if (btnTabMyReview) btnTabMyReview.classList.remove('active');
+        if (btnTabOppReview) btnTabOppReview.classList.remove('active');
+        updateReviewDisplay();
+      };
+    }
+
+    if (btnTabMyReview) btnTabMyReview.click();
+  }
+
+  /* ==========================================================================
      Game Over & Rematch
      ========================================================================== */
   function showGameOverScreen(data) {
@@ -940,8 +1171,10 @@
     gameoverReason.textContent = reason;
 
     // Reveal secrets
-    revealMyVal.textContent = isPlayer0 ? secrets.player0.secret : secrets.player1.secret;
-    revealOppVal.textContent = isPlayer0 ? secrets.player1.secret : secrets.player0.secret;
+    const mySecret = isPlayer0 ? secrets.player0.secret : secrets.player1.secret;
+    const oppSecret = isPlayer0 ? secrets.player1.secret : secrets.player0.secret;
+    revealMyVal.textContent = mySecret;
+    revealOppVal.textContent = oppSecret;
 
     statRounds.textContent = totalRounds;
     statGuesses.textContent = state.guesses.my.length;
@@ -949,6 +1182,9 @@
     rematchWaitingNotice.classList.add('hidden');
     btnPlayAgain.disabled = false;
     btnPlayAgain.textContent = '🔄 Play Again (Rematch)';
+
+    // Populate Match Review Breakdown
+    renderGameOverReview(mySecret, oppSecret);
 
     if (window.soundManager) window.soundManager.playGameOver(isWin);
     switchScreen('gameover');

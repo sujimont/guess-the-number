@@ -1203,12 +1203,14 @@ p.hero-desc {
 /* SCREEN 5: Game Over */
 .gameover-card {
   text-align: center;
-  padding: 32px 20px;
+  padding: 20px 14px;
+  max-width: 540px;
+  margin: 0 auto;
 }
 
 .gameover-trophy {
-  font-size: 4rem;
-  margin-bottom: 8px;
+  font-size: 3.2rem;
+  margin-bottom: 4px;
   animation: bounce 0.6s ease;
 }
 
@@ -1219,22 +1221,22 @@ p.hero-desc {
 }
 
 .gameover-title {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 800;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .gameover-reason {
   color: var(--text-muted);
-  font-size: 1rem;
-  margin-bottom: 22px;
+  font-size: 0.92rem;
+  margin-bottom: 14px;
 }
 
 .secrets-reveal-box {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
-  margin-bottom: 22px;
+  margin-bottom: 14px;
 }
 
 .secret-reveal-card {
@@ -1242,31 +1244,31 @@ p.hero-desc {
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .reveal-label {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
 }
 
 .reveal-number {
   font-family: monospace;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 800;
   color: var(--primary);
-  letter-spacing: 0.15em;
+  letter-spacing: 0.12em;
 }
 
 .gameover-stats {
   display: flex;
   justify-content: space-around;
-  margin-bottom: 24px;
-  padding: 12px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
   background: var(--bg-card-subtle);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
@@ -1279,15 +1281,255 @@ p.hero-desc {
 }
 
 .stat-val {
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: var(--text-main);
 }
 
 .stat-lbl {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
   text-transform: uppercase;
+}
+
+/* Post-Game Guess Breakdown Panel */
+.gameover-review-panel {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.review-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
+}
+
+.review-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.review-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.exact {
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.legend-dot.wrong-pos {
+  background: var(--warning);
+}
+
+.legend-dot.miss {
+  background: var(--text-dim);
+}
+
+.review-nav-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.review-tab {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 4px 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.review-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.review-target-banner {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.review-target-banner b {
+  font-family: monospace;
+  font-size: 0.95rem;
+  color: var(--primary);
+  letter-spacing: 0.1em;
+}
+
+.review-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+  scroll-behavior: smooth;
+}
+
+/* Individual Guess Review Item */
+.review-guess-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+}
+
+.review-guess-item.winning-guess {
+  border-color: var(--success);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.review-guess-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.review-turn-num {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  width: 20px;
+}
+
+.review-digits-chips {
+  display: flex;
+  gap: 3px;
+  font-family: monospace;
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.digit-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.digit-chip.digit-exact {
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: var(--success);
+  font-weight: 900;
+}
+
+.digit-chip.digit-wrong-pos {
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.digit-chip.digit-miss {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: var(--text-dim);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.review-feedback-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.win-badge-tag {
+  background: var(--success);
+  color: #ffffff;
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* Side-by-side Dual Column Review */
+.review-both-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.review-col-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+}
+
+.review-sublist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.special-banner.gameover-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #064e3b;
+  border-color: var(--success);
+  color: #ecfdf5;
+  font-size: 0.8rem;
 }
 
 .gameover-actions {

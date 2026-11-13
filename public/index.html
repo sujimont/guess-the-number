@@ -355,7 +355,45 @@
             </div>
           </div>
 
+          <!-- Match Review / Guess Breakdown Section -->
+          <div class="gameover-review-panel" id="gameover-review-panel">
+            <div class="review-header">
+              <h3 class="review-title">📋 Guesses & Mistake Analysis</h3>
+              <div class="review-legend">
+                <span class="legend-item"><span class="legend-dot exact"></span>Exact</span>
+                <span class="legend-item"><span class="legend-dot wrong-pos"></span>Wrong Spot</span>
+                <span class="legend-item"><span class="legend-dot miss"></span>Not in Code</span>
+              </div>
+            </div>
+
+            <!-- Review Filter Tabs -->
+            <div class="review-nav-tabs">
+              <button type="button" class="review-tab active" id="btn-tab-my-review">
+                🎯 My Guesses (<span id="review-my-count">0</span>)
+              </button>
+              <button type="button" class="review-tab" id="btn-tab-opp-review">
+                🛡️ Opponent (<span id="review-opp-count">0</span>)
+              </button>
+              <button type="button" class="review-tab" id="btn-tab-both-review">
+                👥 Both
+              </button>
+            </div>
+
+            <!-- Target Secret Banner -->
+            <div class="review-target-banner" id="review-target-banner">
+              Target Code: <b id="review-target-code">----</b>
+            </div>
+
+            <!-- Scrollable Review List -->
+            <div class="review-list" id="review-list">
+              <!-- Dynamically populated guess analysis items -->
+            </div>
+          </div>
+
           <div class="gameover-actions">
+            <button id="btn-view-board" class="btn btn-secondary btn-block">
+              🔍 View Full Game Board
+            </button>
             <button id="btn-play-again" class="btn btn-primary btn-large btn-block">
               🔄 Play Again (Rematch)
             </button>
