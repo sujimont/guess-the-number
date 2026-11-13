@@ -12,7 +12,7 @@
     playerName: localStorage.getItem('gtn_player_name') || '',
     roomConfig: {
       digitCount: 4,
-      mode: 'bulls_and_cows',
+      mode: 'exact',
       allowDuplicates: false,
       timerEnabled: false,
       timerSeconds: 0,
@@ -310,6 +310,12 @@
     const container = document.getElementById(containerId);
     if (!container) return;
     const buttons = container.querySelectorAll('.segment-btn');
+
+    // Sync initial state from the DOM active button
+    const initialActive = container.querySelector('.segment-btn.active');
+    if (initialActive && onChange) {
+      onChange(initialActive);
+    }
 
     buttons.forEach(btn => {
       btn.addEventListener('click', () => {
