@@ -898,60 +898,64 @@ p.hero-desc {
 }
 
 .history-list {
-  max-height: 180px;
+  max-height: 270px;
   overflow-y: auto;
   display: flex;
-  flex-direction: column-reverse; /* Newest guesses visible at top */
-  gap: 6px;
+  flex-direction: column; /* Chronological order */
+  gap: 3px;
+  padding-right: 2px;
+  scroll-behavior: smooth;
 }
 
 .empty-history-placeholder {
   text-align: center;
   color: var(--text-dim);
-  font-size: 0.85rem;
-  padding: 24px 10px;
+  font-size: 0.8rem;
+  padding: 18px 10px;
 }
 
 .guess-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: 2px 8px;
+  min-height: 24px;
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   animation: fadeIn 0.15s ease;
+  font-size: 0.85rem;
 }
 
 .guess-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .guess-index {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
   font-weight: 600;
-  width: 24px;
+  width: 22px;
 }
 
 .guess-digits {
   font-family: monospace;
   font-weight: 800;
-  font-size: 1.15rem;
-  letter-spacing: 0.12em;
+  font-size: 0.98rem;
+  letter-spacing: 0.15em;
 }
 
 .feedback-badges {
   display: flex;
-  gap: 5px;
+  gap: 4px;
 }
 
 .badge-feedback {
-  padding: 3px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-sm);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -1050,37 +1054,50 @@ p.hero-desc {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 12px;
+  padding: 8px 10px;
   box-shadow: var(--shadow-md);
 }
 
 .guess-input-row {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 2px;
+}
+
+.auto-submit-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
 }
 
 .digit-boxes-container.compact {
   margin-bottom: 0;
-  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
 }
 
 .digit-boxes-container.compact .digit-box {
-  width: 44px;
-  height: 52px;
-  font-size: 1.5rem;
+  width: 36px;
+  height: 42px;
+  font-size: 1.35rem;
+  border-radius: var(--radius-sm);
 }
 
 .compact-numpad {
-  margin-top: 4px;
-  gap: 6px;
+  margin-top: 2px;
+  gap: 5px;
   max-width: 100%;
 }
 
 .compact-numpad .keypad-btn {
-  height: 44px;
-  font-size: 1.25rem;
+  height: 32px;
+  font-size: 1.15rem;
+  border-radius: var(--radius-sm);
 }
 
 /* SCREEN 5: Game Over */

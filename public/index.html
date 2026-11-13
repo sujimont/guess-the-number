@@ -64,11 +64,11 @@
           </div>
         </div>
 
-        <!-- Create Game Modal / Card -->
+        <!-- Create Game / AI Match Modal -->
         <div id="modal-create-game" class="modal-overlay hidden">
           <div class="card modal-card">
             <div class="modal-header">
-              <h2>Create New Game</h2>
+              <h2 id="modal-create-title">Create New Game</h2>
               <button class="btn-close modal-close" aria-label="Close">&times;</button>
             </div>
             
@@ -117,7 +117,7 @@
             </div>
 
             <div class="modal-footer">
-              <button id="btn-confirm-create" class="btn btn-primary btn-block">Start Room</button>
+              <button id="btn-confirm-create" class="btn btn-primary btn-block">Start Game</button>
             </div>
           </div>
         </div>
@@ -309,20 +309,18 @@
           </div>
         </div>
 
-        <!-- Guess Input Area & Mobile Numpad -->
+        <!-- Guess Input Area & Mobile Numpad (Auto-submits on final digit!) -->
         <div class="guess-input-panel" id="guess-input-panel">
           <div class="guess-input-row">
             <div class="digit-boxes-container compact" id="guess-boxes">
               <!-- Dynamically populated guess boxes -->
             </div>
-            <button id="btn-submit-guess" class="btn btn-primary" disabled>
-              Guess
-            </button>
           </div>
+          <div class="auto-submit-hint">⚡ Auto-submits on final digit</div>
 
           <!-- Built-in Mobile Numpad -->
           <div class="numpad-container compact-numpad" id="game-numpad">
-            <!-- 0-9 digits + Backspace + Submit -->
+            <!-- 0-9 digits + Backspace -->
           </div>
         </div>
       </section>

@@ -27,7 +27,8 @@
       my: [],
       opp: []
     },
-    scratchpad: null
+    scratchpad: null,
+    isCreatingAi: false
   };
 
   // DOM Elements
@@ -52,6 +53,7 @@
   const btnShowJoin = document.getElementById('btn-show-join');
   const btnPlayAi = document.getElementById('btn-play-ai');
   const modalCreate = document.getElementById('modal-create-game');
+  const modalCreateTitle = document.getElementById('modal-create-title');
   const modalJoin = document.getElementById('modal-join-game');
   const btnConfirmCreate = document.getElementById('btn-confirm-create');
   const btnConfirmJoin = document.getElementById('btn-confirm-join');
@@ -234,38 +236,6 @@
   }
 
   function initMobileKeyboardBridge() {
-    hiddenInput = document.createElement('input');
-    hiddenInput.type = 'text';
-    hiddenInput.inputMode = 'numeric';
-    hiddenInput.pattern = '[0-9]*';
-    hiddenInput.style.position = 'fixed';
-    hiddenInput.style.bottom = '0';
-    hiddenInput.style.left = '0';
-    hiddenInput.style.opacity = '0';
-    hiddenInput.style.pointerEvents = 'none';
-    hiddenInput.style.height = '1px';
-    hiddenInput.style.width = '1px';
-    hiddenInput.style.zIndex = '-1';
-    document.body.appendChild(hiddenInput);
-
-    // Mobile virtual keyboard input
-    hiddenInput.addEventListener('input', (e) => {
-      const val = e.target.value;
-      if (val && /^\d+$/.test(val)) {
-        const lastChar = val[val.length - 1];
-        handleDigitInput(lastChar);
-      }
-      hiddenInput.value = '';
-    });
-
-    hiddenInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace') {
-        handleBackspace();
-      } else if (e.key === 'Enter') {
-        handleEnter();
-      }
-    });
-
     // Universal Desktop & PC Keyboard Listener (Top number row + Numpad)
     window.addEventListener('keydown', (e) => {
       // Do not intercept if user is typing in name or join-code inputs
@@ -275,7 +245,7 @@
 
       const digit = getDigitFromKeyboardEvent(e);
       if (digit !== null) {
-        e.preventDefault(); // Prevents double-firing into hiddenInput
+        e.preventDefault();
         handleDigitInput(digit);
         return;
       }
@@ -295,9 +265,7 @@
   }
 
   function focusMobileNumpad() {
-    if (hiddenInput) {
-      hiddenInput.focus();
-    }
+    // Intentionally no-op: prevents device software keyboard from popping up on mobile
   }
 
   /* ==========================================================================
@@ -341,6 +309,9 @@
   function initModals() {
     // Show modals
     btnShowCreate.addEventListener('click', () => {
+      state.isCreatingAi = false;
+      modalCreateTitle.textContent = 'Create Online Game';
+      btnConfirmCreate.textContent = 'Start Online Room';
       modalCreate.classList.remove('hidden');
       if (window.soundManager) window.soundManager.playTap();
     });
@@ -352,8 +323,11 @@
     });
 
     btnPlayAi.addEventListener('click', () => {
+      state.isCreatingAi = true;
+      modalCreateTitle.textContent = 'Play vs Computer (AI)';
+      btnConfirmCreate.textContent = 'Start Practice Match';
+      modalCreate.classList.remove('hidden');
       if (window.soundManager) window.soundManager.playTap();
-      startAiGame();
     });
 
     // Close modals
@@ -373,10 +347,10 @@
       });
     });
 
-    // Confirm Create Room
+    // Confirm Create Game / AI Match
     btnConfirmCreate.addEventListener('click', async () => {
       modalCreate.classList.add('hidden');
-      await createRoom(false);
+      await createRoom(state.isCreatingAi);
     });
 
     // Confirm Join Room
@@ -646,7 +620,13 @@
         state.guessDigits.push(digit);
         if (window.soundManager) window.soundManager.playDigit();
         renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
-        validateGuessInput();
+        
+        // AUTO SUBMIT on final digit!
+        if (state.guessDigits.length === state.roomConfig.digitCount) {
+          setTimeout(() => {
+            submitCurrentGuess();
+          }, 120);
+        }
       }
     }
   }
@@ -780,7 +760,9 @@
 
   function updateTurnUI(activePlayerIndex) {
     state.isMyTurn = activePlayerIndex === state.playerIndex;
-    btnSubmitGuess.disabled = !state.isMyTurn || state.guessDigits.length !== state.roomConfig.digitCount;
+    if (btnSubmitGuess) {
+      btnSubmitGuess.disabled = !state.isMyTurn || state.guessDigits.length !== state.roomConfig.digitCount;
+    }
 
     // Toggle numpad button responsiveness
     gameNumpad.querySelectorAll('button').forEach(b => {
@@ -792,7 +774,6 @@
       turnBannerIcon.textContent = '🎯';
       turnBannerText.textContent = 'Your Turn! Guess opponent\'s number';
       if (window.soundManager) window.soundManager.playTurn();
-      focusMobileNumpad();
     } else {
       turnBanner.className = 'turn-banner opp-turn';
       turnBannerIcon.textContent = '⏳';
@@ -803,20 +784,22 @@
   function validateGuessInput() {
     const count = state.roomConfig.digitCount;
     const isFull = state.guessDigits.length === count;
-    btnSubmitGuess.disabled = !state.isMyTurn || !isFull;
+    if (btnSubmitGuess) {
+      btnSubmitGuess.disabled = !state.isMyTurn || !isFull;
+    }
   }
 
   async function submitCurrentGuess() {
     if (!state.isMyTurn) return;
 
     const guess = state.guessDigits.join('');
-    btnSubmitGuess.disabled = true;
+    if (btnSubmitGuess) btnSubmitGuess.disabled = true;
 
     const res = await window.socketClient.submitGuess(guess);
     if (!res.success) {
       showToast(res.error || 'Failed to submit guess', 'error');
       if (window.soundManager) window.soundManager.playError();
-      btnSubmitGuess.disabled = false;
+      if (btnSubmitGuess) btnSubmitGuess.disabled = false;
       return;
     }
 
@@ -859,7 +842,9 @@
       <div class="feedback-badges">${badgesHtml}</div>
     `;
 
-    targetList.prepend(row);
+    // Append in chronological order and auto-scroll to latest!
+    targetList.appendChild(row);
+    targetList.scrollTop = targetList.scrollHeight;
 
     if (isMine) {
       if (guessRecord.feedback.isWin) {
