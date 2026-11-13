@@ -258,6 +258,14 @@ function resetRoomForRematch(room) {
 
   io.to(room.code).emit('rematch_started', {
     state: room.state,
+    roomConfig: {
+      digitCount: room.digitCount,
+      mode: room.mode,
+      allowDuplicates: room.allowDuplicates,
+      timerEnabled: room.timerEnabled,
+      timerSeconds: room.timerSeconds,
+      isAiGame: room.isAiGame
+    },
     players: room.players.map(p => ({ name: p.name, isReady: p.isReady }))
   });
 }
@@ -359,8 +367,67 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'Room not found. Check the code and try again.' });
       }
 
-      if (room.players.length >= 2) {
-        return callback({ success: false, error: 'Room is already full.' });
+      // Check if this socket or a reconnecting player is rejoining their slot
+      let playerIndexToAssign = null;
+      const sameSocketIdx = room.players.findIndex(p => p.id === socket.id);
+
+      if (sameSocketIdx !== -1) {
+        playerIndexToAssign = sameSocketIdx;
+      } else if (room.players.length >= 2) {
+        // 1. Find if any player slot belongs to a disconnected socket
+        const discIdx = room.players.findIndex(p => {
+          const s = io.sockets.sockets.get(p.id);
+          return !s || !s.connected;
+        });
+
+        if (discIdx !== -1) {
+          playerIndexToAssign = discIdx;
+        } else {
+          // 2. If same player name is trying to rejoin
+          const nameClean = (playerName || '').trim().toLowerCase();
+          const nameIdx = room.players.findIndex(p => p.name.toLowerCase() === nameClean);
+          if (nameIdx !== -1) {
+            playerIndexToAssign = nameIdx;
+          } else if (room.state === 'gameover' || room.state === 'setup') {
+            // In gameover or setup phase, allow reclaiming the guest slot (player 1)
+            playerIndexToAssign = 1;
+          } else {
+            return callback({ success: false, error: 'Room is already full.' });
+          }
+        }
+      }
+
+      // Reclaim existing slot
+      if (playerIndexToAssign !== null) {
+        const player = room.players[playerIndexToAssign];
+        player.id = socket.id;
+        if (playerName) player.name = playerName.trim().slice(0, 16);
+        socket.join(cleanCode);
+        socket.roomCode = cleanCode;
+        socket.playerIndex = playerIndexToAssign;
+
+        if (room.state === 'setup') {
+          io.to(cleanCode).emit('room_ready_for_setup', {
+            players: room.players.map(p => ({ name: p.name, isReady: p.isReady })),
+            state: room.state
+          });
+        }
+
+        return callback({
+          success: true,
+          roomCode: cleanCode,
+          roomConfig: {
+            digitCount: room.digitCount,
+            mode: room.mode,
+            allowDuplicates: room.allowDuplicates,
+            timerEnabled: room.timerEnabled,
+            timerSeconds: room.timerSeconds,
+            isAiGame: room.isAiGame
+          },
+          playerIndex: playerIndexToAssign,
+          players: room.players.map(p => ({ name: p.name, isReady: p.isReady })),
+          state: room.state
+        });
       }
 
       const player = {
@@ -497,7 +564,13 @@ io.on('connection', (socket) => {
   });
 
   // Request Rematch / Play Again
-  socket.on('request_rematch', (callback) => {
+  socket.on('request_rematch', (data, callback) => {
+    if (typeof data === 'function') {
+      callback = data;
+      data = {};
+    }
+    callback = callback || (() => {});
+
     try {
       const room = rooms.get(socket.roomCode);
       if (!room) return callback({ success: false, error: 'Room not found.' });
@@ -507,15 +580,46 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'Player not recognized.' });
       }
 
+      // If the initiating player chose updated game parameters for rematch
+      if (data && data.roomConfig) {
+        const { digitCount, mode, allowDuplicates, timerEnabled, timerSeconds } = data.roomConfig;
+        if (digitCount) room.digitCount = Number(digitCount) === 5 ? 5 : 4;
+        if (mode) room.mode = mode === 'exact' ? 'exact' : 'bulls_and_cows';
+        if (allowDuplicates !== undefined) room.allowDuplicates = Boolean(allowDuplicates);
+        if (timerEnabled !== undefined) room.timerEnabled = Boolean(timerEnabled);
+        if (timerSeconds !== undefined) {
+          room.timerSeconds = Number(timerSeconds) || 0;
+          room.turnTimeRemaining = room.timerSeconds;
+        }
+      }
+
       room.players[pIdx].rematchRequested = true;
-      callback({ success: true });
+      callback({
+        success: true,
+        roomConfig: {
+          digitCount: room.digitCount,
+          mode: room.mode,
+          allowDuplicates: room.allowDuplicates,
+          timerEnabled: room.timerEnabled,
+          timerSeconds: room.timerSeconds,
+          isAiGame: room.isAiGame
+        }
+      });
 
       if (room.isAiGame || room.players.every(p => p.rematchRequested)) {
         resetRoomForRematch(room);
       } else {
         io.to(room.code).emit('rematch_requested_notice', {
           playerIndex: pIdx,
-          playerName: room.players[pIdx].name
+          playerName: room.players[pIdx].name,
+          roomConfig: {
+            digitCount: room.digitCount,
+            mode: room.mode,
+            allowDuplicates: room.allowDuplicates,
+            timerEnabled: room.timerEnabled,
+            timerSeconds: room.timerSeconds,
+            isAiGame: room.isAiGame
+          }
         });
       }
     } catch (err) {

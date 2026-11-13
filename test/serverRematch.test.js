@@ -1,0 +1,101 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const ioClient = require('socket.io-client');
+const { server, io, rooms } = require('../server');
+
+test('Server Rematch Flow with Parameter Change and Reconnection', async () => {
+  const port = await new Promise((resolve) => {
+    const s = server.listen(0, () => {
+      resolve(s.address().port);
+    });
+  });
+
+  const url = `http://localhost:${port}`;
+  const client1 = ioClient(url);
+  const client2 = ioClient(url);
+
+  await new Promise(res => client1.on('connect', res));
+  await new Promise(res => client2.on('connect', res));
+
+  // 1. Create Room (4 digits, bulls_and_cows)
+  const createRes = await new Promise(res => {
+    client1.emit('create_room', {
+      playerName: 'Player1',
+      digitCount: 4,
+      mode: 'bulls_and_cows',
+      allowDuplicates: false
+    }, res);
+  });
+  assert.strictEqual(createRes.success, true);
+  const roomCode = createRes.roomCode;
+
+  // 2. Client 2 joins
+  const joinRes = await new Promise(res => {
+    client2.emit('join_room', { roomCode, playerName: 'Player2' }, res);
+  });
+  assert.strictEqual(joinRes.success, true);
+
+  // 3. Set secrets
+  await new Promise(res => client1.emit('set_secret', { secret: '1234' }, res));
+  await new Promise(res => client2.emit('set_secret', { secret: '5678' }, res));
+
+  // 4. Client 1 cracks client 2's secret on Round 1
+  await new Promise(res => client1.emit('submit_guess', { guess: '5678' }, res));
+
+  // Client 2 misses on equal turn -> Game Over, Player 1 wins
+  const gameOverPromise = new Promise(res => client1.on('game_over', res));
+  await new Promise(res => client2.emit('submit_guess', { guess: '9999' }, res));
+  const gameOver = await gameOverPromise;
+  assert.strictEqual(gameOver.outcome, 'player0');
+
+  // 5. Client 1 requests rematch with UPDATED PARAMETERS (5 digits, exact mode, duplicates allowed)
+  const noticePromise = new Promise(res => client2.on('rematch_requested_notice', res));
+  const rematchReqRes = await new Promise(res => {
+    client1.emit('request_rematch', {
+      roomConfig: {
+        digitCount: 5,
+        mode: 'exact',
+        allowDuplicates: true
+      }
+    }, res);
+  });
+  assert.strictEqual(rematchReqRes.success, true);
+  assert.strictEqual(rematchReqRes.roomConfig.digitCount, 5);
+  assert.strictEqual(rematchReqRes.roomConfig.mode, 'exact');
+  assert.strictEqual(rematchReqRes.roomConfig.allowDuplicates, true);
+
+  const notice = await noticePromise;
+  assert.strictEqual(notice.playerIndex, 0);
+  assert.strictEqual(notice.roomConfig.digitCount, 5);
+  assert.strictEqual(notice.roomConfig.mode, 'exact');
+  assert.strictEqual(notice.roomConfig.allowDuplicates, true);
+
+  // 6. Client 2 accepts rematch -> rematch_started broadcast with updated config
+  const rematchStartedPromise = new Promise(res => client1.on('rematch_started', res));
+  await new Promise(res => client2.emit('request_rematch', {}, res));
+  const rematchStarted = await rematchStartedPromise;
+  assert.strictEqual(rematchStarted.roomConfig.digitCount, 5);
+  assert.strictEqual(rematchStarted.roomConfig.mode, 'exact');
+  assert.strictEqual(rematchStarted.roomConfig.allowDuplicates, true);
+
+  // 7. Test Reconnection: Client 2 reloads/rejoins with new socket
+  const client2Reloaded = ioClient(url);
+  await new Promise(res => client2Reloaded.on('connect', res));
+  client2.disconnect();
+
+  const rejoinRes = await new Promise(res => {
+    client2Reloaded.emit('join_room', { roomCode, playerName: 'Player2' }, res);
+  });
+  assert.strictEqual(rejoinRes.success, true);
+  assert.strictEqual(rejoinRes.playerIndex, 1);
+  assert.strictEqual(rejoinRes.roomConfig.digitCount, 5);
+
+  client1.disconnect();
+  client2Reloaded.disconnect();
+  rooms.clear();
+  await new Promise(res => {
+    io.close(() => {
+      server.close(res);
+    });
+  });
+});

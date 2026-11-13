@@ -19,8 +19,10 @@
       isAiGame: false
     },
     gameState: 'home', // 'home' | 'waiting' | 'setup' | 'game' | 'gameover'
-    secretDigits: [],
-    guessDigits: [],
+    secretDigits: ['', '', '', ''],
+    secretBoxIndex: 0,
+    guessDigits: ['', '', '', ''],
+    activeBoxIndex: 0,
     isMyTurn: false,
     mySecret: null,
     guesses: {
@@ -29,6 +31,7 @@
     },
     scratchpad: null,
     isCreatingAi: false,
+    isRematchConfig: false,
     seenGuesses: new Set()
   };
 
@@ -59,6 +62,7 @@
   const btnConfirmCreate = document.getElementById('btn-confirm-create');
   const btnConfirmJoin = document.getElementById('btn-confirm-join');
   const joinCodeInput = document.getElementById('join-room-code-input');
+  const joinPlayerNameInput = document.getElementById('join-player-name-input');
 
   // Waiting Screen Elements
   const displayRoomCode = document.getElementById('display-room-code');
@@ -81,6 +85,7 @@
   const gameCodeChip = document.getElementById('game-code-chip');
   const gameModeChip = document.getElementById('game-mode-chip');
   const headerMySecret = document.getElementById('header-my-secret');
+  const colMySecret = document.getElementById('col-my-secret');
   const btnToggleScratchpad = document.getElementById('btn-toggle-scratchpad');
   const scratchpadPanel = document.getElementById('scratchpad-panel');
   const gameTimerContainer = document.getElementById('game-timer-container');
@@ -215,11 +220,20 @@
   function initNameInput() {
     if (state.playerName) {
       playerNameInput.value = state.playerName;
+      if (joinPlayerNameInput) joinPlayerNameInput.value = state.playerName;
     }
     playerNameInput.addEventListener('input', (e) => {
       state.playerName = e.target.value.trim().slice(0, 16);
       localStorage.setItem('gtn_player_name', state.playerName);
+      if (joinPlayerNameInput) joinPlayerNameInput.value = state.playerName;
     });
+    if (joinPlayerNameInput) {
+      joinPlayerNameInput.addEventListener('input', (e) => {
+        state.playerName = e.target.value.trim().slice(0, 16);
+        localStorage.setItem('gtn_player_name', state.playerName);
+        playerNameInput.value = state.playerName;
+      });
+    }
   }
 
   function initScratchpad() {
@@ -338,26 +352,69 @@
     });
   }
 
+  function syncSegmentedControlsFromConfig() {
+    // Digits
+    const digitBtns = document.querySelectorAll('#digits-selector .segment-btn');
+    digitBtns.forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.digits, 10) === state.roomConfig.digitCount);
+    });
+
+    // Mode
+    const modeBtns = document.querySelectorAll('#mode-selector .segment-btn');
+    modeBtns.forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === state.roomConfig.mode);
+    });
+
+    // Duplicates
+    const dupBtns = document.querySelectorAll('#duplicates-selector .segment-btn');
+    dupBtns.forEach(b => {
+      b.classList.toggle('active', (b.dataset.duplicates === 'true') === state.roomConfig.allowDuplicates);
+    });
+
+    // Timer
+    const timerBtns = document.querySelectorAll('#timer-selector .segment-btn');
+    const timerVal = state.roomConfig.timerEnabled ? state.roomConfig.timerSeconds : 0;
+    timerBtns.forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.timer, 10) === timerVal);
+    });
+  }
+
+  function openRematchModal() {
+    state.isRematchConfig = true;
+    modalCreateTitle.textContent = 'Rematch Settings';
+    btnConfirmCreate.textContent = '🚀 Start Rematch';
+    syncSegmentedControlsFromConfig();
+    modalCreate.classList.remove('hidden');
+    if (window.soundManager) window.soundManager.playTap();
+  }
+
   function initModals() {
     // Show modals
     btnShowCreate.addEventListener('click', () => {
       state.isCreatingAi = false;
+      state.isRematchConfig = false;
       modalCreateTitle.textContent = 'Create Online Game';
       btnConfirmCreate.textContent = 'Start Online Room';
+      syncSegmentedControlsFromConfig();
       modalCreate.classList.remove('hidden');
       if (window.soundManager) window.soundManager.playTap();
     });
 
     btnShowJoin.addEventListener('click', () => {
       modalJoin.classList.remove('hidden');
+      if (joinPlayerNameInput) {
+        joinPlayerNameInput.value = state.playerName || '';
+      }
       joinCodeInput.focus();
       if (window.soundManager) window.soundManager.playTap();
     });
 
     btnPlayAi.addEventListener('click', () => {
       state.isCreatingAi = true;
+      state.isRematchConfig = false;
       modalCreateTitle.textContent = 'Play vs Computer (AI)';
       btnConfirmCreate.textContent = 'Start Practice Match';
+      syncSegmentedControlsFromConfig();
       modalCreate.classList.remove('hidden');
       if (window.soundManager) window.soundManager.playTap();
     });
@@ -379,14 +436,24 @@
       });
     });
 
-    // Confirm Create Game / AI Match
+    // Confirm Create Game / AI Match / Rematch
     btnConfirmCreate.addEventListener('click', async () => {
       modalCreate.classList.add('hidden');
-      await createRoom(state.isCreatingAi);
+      if (state.isRematchConfig) {
+        await requestRematch();
+      } else {
+        await createRoom(state.isCreatingAi);
+      }
     });
 
     // Confirm Join Room
     btnConfirmJoin.addEventListener('click', async () => {
+      if (joinPlayerNameInput && joinPlayerNameInput.value.trim()) {
+        state.playerName = joinPlayerNameInput.value.trim().slice(0, 16);
+        localStorage.setItem('gtn_player_name', state.playerName);
+        if (playerNameInput) playerNameInput.value = state.playerName;
+      }
+
       const code = joinCodeInput.value.trim().toUpperCase();
       if (!code || code.length !== 6) {
         showToast('Please enter a valid 6-character room code', 'error');
@@ -408,6 +475,14 @@
       }
     });
 
+    if (joinPlayerNameInput) {
+      joinPlayerNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          joinCodeInput.focus();
+        }
+      });
+    }
+
     // Copy Code / Link buttons
     btnCopyCode.addEventListener('click', () => {
       if (state.roomCode) {
@@ -419,7 +494,9 @@
 
     btnCopyLink.addEventListener('click', () => {
       if (state.roomCode) {
-        const url = `${window.location.origin}${window.location.pathname}?room=${state.roomCode}`;
+        const cleanOrigin = window.location.origin;
+        const cleanPath = window.location.pathname.replace(/\/+$/, '');
+        const url = `${cleanOrigin}${cleanPath}/?room=${state.roomCode}`;
         navigator.clipboard.writeText(url);
         showToast('Direct invite link copied to clipboard!', 'success');
         if (window.soundManager) window.soundManager.playTap();
@@ -488,7 +565,11 @@
     // Play Again Button
     btnPlayAgain.addEventListener('click', () => {
       if (window.soundManager) window.soundManager.playTap();
-      requestRematch();
+      if (state.opponentRematchRequested) {
+        requestRematch();
+      } else {
+        openRematchModal();
+      }
     });
 
     btnReturnHome.addEventListener('click', () => {
@@ -496,12 +577,43 @@
     });
   }
 
+  function extractRoomCodeFromUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      let raw = params.get('room') || params.get('code') || params.get('r');
+
+      if (!raw && window.location.hash) {
+        const hashStr = window.location.hash.replace(/^#\/?/, '');
+        const hashParams = new URLSearchParams(hashStr);
+        raw = hashParams.get('room') || hashParams.get('code') || hashParams.get('r');
+      }
+
+      if (!raw) {
+        const match = window.location.href.match(/[?&#](?:room|code|r)=([A-Za-z0-9]{4,8})/i);
+        if (match) raw = match[1];
+      }
+
+      if (raw) {
+        const clean = raw.replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase();
+        if (clean.length >= 6) {
+          return clean.slice(0, 6);
+        }
+      }
+    } catch (e) {
+      console.warn('Error extracting room code from URL:', e);
+    }
+    return null;
+  }
+
   function checkUrlForRoom() {
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    if (roomParam && roomParam.length === 6) {
-      joinCodeInput.value = roomParam.toUpperCase();
+    const code = extractRoomCodeFromUrl();
+    if (code) {
+      joinCodeInput.value = code;
+      if (joinPlayerNameInput) {
+        joinPlayerNameInput.value = state.playerName || '';
+      }
       modalJoin.classList.remove('hidden');
+      showToast(`Game invite found! Room: ${code}. Enter your name to join.`, 'info', 4000);
     }
   }
 
@@ -575,19 +687,28 @@
     switchScreen('waiting');
   }
 
+  function updateSecretDisplays() {
+    const secret = state.mySecret || '----';
+    if (headerMySecret) headerMySecret.textContent = secret;
+    if (colMySecret) colMySecret.textContent = secret;
+  }
+
   function startSetupPhase(players) {
-    state.secretDigits = [];
+    const count = state.roomConfig.digitCount;
+    state.secretDigits = new Array(count).fill('');
+    state.secretBoxIndex = 0;
     state.mySecret = null;
+    updateSecretDisplays();
+
     btnLockSecret.disabled = true;
     btnLockSecret.textContent = '🔒 Lock In Secret Number';
     secretValidationMsg.textContent = '';
     secretValidationMsg.className = 'validation-msg';
 
-    const count = state.roomConfig.digitCount;
     const dupText = state.roomConfig.allowDuplicates ? 'Duplicates allowed' : 'Must be unique digits';
     setupRulesDesc.textContent = `Pick a ${count}-digit secret code (${dupText}). Opponent will try to crack this!`;
 
-    renderDigitBoxes(secretBoxesContainer, count, state.secretDigits);
+    renderDigitBoxes(secretBoxesContainer, count, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
     renderNumpad(setupNumpad);
 
     if (state.roomConfig.isAiGame) {
@@ -603,23 +724,36 @@
   /* ==========================================================================
      Digit Boxes & Numpad Rendering
      ========================================================================== */
-  function renderDigitBoxes(container, count, digits) {
+  function onSelectSecretBox(idx) {
+    state.secretBoxIndex = idx;
+    renderDigitBoxes(secretBoxesContainer, state.roomConfig.digitCount, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
+  }
+
+  function onSelectGuessBox(idx) {
+    state.activeBoxIndex = idx;
+    renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
+  }
+
+  function renderDigitBoxes(container, count, digits, activeIndex, onSelectBox) {
     container.innerHTML = '';
     for (let i = 0; i < count; i++) {
       const box = document.createElement('div');
       box.className = 'digit-box';
-      if (i < digits.length) {
-        box.textContent = digits[i];
+      const val = digits[i] !== undefined && digits[i] !== null ? digits[i] : '';
+      box.textContent = val;
+
+      if (val !== '') {
         box.classList.add('filled');
-      } else {
-        box.textContent = '';
       }
-      if (i === digits.length) {
+      if (i === activeIndex) {
         box.classList.add('active');
       }
 
-      box.addEventListener('click', () => {
-        focusMobileNumpad();
+      box.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (onSelectBox) {
+          onSelectBox(i);
+        }
       });
 
       container.appendChild(box);
@@ -657,71 +791,106 @@
      ========================================================================== */
   function handleDigitInput(digit) {
     if (state.gameState === 'setup') {
-      if (state.secretDigits.length < state.roomConfig.digitCount) {
-        // If duplicates not allowed, check
-        if (!state.roomConfig.allowDuplicates && state.secretDigits.includes(digit)) {
+      const count = state.roomConfig.digitCount;
+      // If duplicates not allowed, check other boxes
+      if (!state.roomConfig.allowDuplicates) {
+        const existingIdx = state.secretDigits.indexOf(digit);
+        if (existingIdx !== -1 && existingIdx !== state.secretBoxIndex) {
           showSecretError('Duplicate digits not allowed for this room');
           if (window.soundManager) window.soundManager.playError();
           return;
         }
-
-        state.secretDigits.push(digit);
-        if (window.soundManager) window.soundManager.playDigit();
-        renderDigitBoxes(secretBoxesContainer, state.roomConfig.digitCount, state.secretDigits);
-        validateSecretInput();
       }
-    } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn) {
-      if (state.guessDigits.length < state.roomConfig.digitCount) {
-        state.guessDigits.push(digit);
-        if (window.soundManager) window.soundManager.playDigit();
-        renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
-        
-        // AUTO SUBMIT on final digit!
-        if (state.guessDigits.length === state.roomConfig.digitCount) {
-          setTimeout(() => {
-            submitCurrentGuess();
-          }, 100);
+
+      state.secretDigits[state.secretBoxIndex] = digit;
+      if (window.soundManager) window.soundManager.playDigit();
+
+      // Find next unfilled slot or advance to next slot
+      let nextIdx = (state.secretBoxIndex + 1) % count;
+      for (let step = 1; step < count; step++) {
+        const candidate = (state.secretBoxIndex + step) % count;
+        if (state.secretDigits[candidate] === '') {
+          nextIdx = candidate;
+          break;
         }
       }
+      state.secretBoxIndex = nextIdx;
+
+      renderDigitBoxes(secretBoxesContainer, count, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
+      validateSecretInput();
+
+    } else if (state.gameState === 'game' || state.gameState === 'playing') {
+      // Keying numbers allowed anytime, even during opponent's turn!
+      // Guesses are never restricted to unique digits even in unique mode.
+      const count = state.roomConfig.digitCount;
+      state.guessDigits[state.activeBoxIndex] = digit;
+      if (window.soundManager) window.soundManager.playDigit();
+
+      // Find next unfilled slot or advance to next slot
+      let nextIdx = (state.activeBoxIndex + 1) % count;
+      for (let step = 1; step < count; step++) {
+        const candidate = (state.activeBoxIndex + step) % count;
+        if (state.guessDigits[candidate] === '') {
+          nextIdx = candidate;
+          break;
+        }
+      }
+      state.activeBoxIndex = nextIdx;
+
+      renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
+      updateSubmitButtonState();
     }
   }
 
   function handleBackspace() {
     if (state.gameState === 'setup') {
-      if (state.secretDigits.length > 0) {
-        state.secretDigits.pop();
-        if (window.soundManager) window.soundManager.playDelete();
-        renderDigitBoxes(secretBoxesContainer, state.roomConfig.digitCount, state.secretDigits);
-        validateSecretInput();
+      const count = state.roomConfig.digitCount;
+      if (state.secretDigits[state.secretBoxIndex] !== '') {
+        state.secretDigits[state.secretBoxIndex] = '';
+      } else {
+        state.secretBoxIndex = state.secretBoxIndex > 0 ? state.secretBoxIndex - 1 : 0;
+        state.secretDigits[state.secretBoxIndex] = '';
       }
-    } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn) {
-      if (state.guessDigits.length > 0) {
-        state.guessDigits.pop();
-        if (window.soundManager) window.soundManager.playDelete();
-        renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
-        validateGuessInput();
+      if (window.soundManager) window.soundManager.playDelete();
+      renderDigitBoxes(secretBoxesContainer, count, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
+      validateSecretInput();
+
+    } else if (state.gameState === 'game' || state.gameState === 'playing') {
+      const count = state.roomConfig.digitCount;
+      if (state.guessDigits[state.activeBoxIndex] !== '') {
+        state.guessDigits[state.activeBoxIndex] = '';
+      } else {
+        state.activeBoxIndex = state.activeBoxIndex > 0 ? state.activeBoxIndex - 1 : 0;
+        state.guessDigits[state.activeBoxIndex] = '';
       }
+      if (window.soundManager) window.soundManager.playDelete();
+      renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
+      updateSubmitButtonState();
     }
   }
 
   function handleClear() {
+    const count = state.roomConfig.digitCount;
     if (state.gameState === 'setup') {
-      state.secretDigits = [];
+      state.secretDigits = new Array(count).fill('');
+      state.secretBoxIndex = 0;
       if (window.soundManager) window.soundManager.playDelete();
-      renderDigitBoxes(secretBoxesContainer, state.roomConfig.digitCount, state.secretDigits);
+      renderDigitBoxes(secretBoxesContainer, count, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
       validateSecretInput();
-    } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn) {
-      state.guessDigits = [];
+
+    } else if (state.gameState === 'game' || state.gameState === 'playing') {
+      state.guessDigits = new Array(count).fill('');
+      state.activeBoxIndex = 0;
       if (window.soundManager) window.soundManager.playDelete();
-      renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
-      validateGuessInput();
+      renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
+      updateSubmitButtonState();
     }
   }
 
   function handleEnter() {
     if (state.gameState === 'setup' && !btnLockSecret.disabled) {
       submitSecretNumber();
-    } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn && !btnSubmitGuess.disabled) {
+    } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn && btnSubmitGuess && !btnSubmitGuess.disabled) {
       submitCurrentGuess();
     }
   }
@@ -731,8 +900,9 @@
      ========================================================================== */
   function validateSecretInput() {
     const count = state.roomConfig.digitCount;
-    if (state.secretDigits.length < count) {
-      secretValidationMsg.textContent = `${count - state.secretDigits.length} digit(s) remaining...`;
+    const filledCount = state.secretDigits.filter(d => d !== '').length;
+    if (filledCount < count) {
+      secretValidationMsg.textContent = `${count - filledCount} digit(s) remaining...`;
       secretValidationMsg.className = 'validation-msg';
       btnLockSecret.disabled = true;
       return;
@@ -769,9 +939,8 @@
     }
 
     state.mySecret = secret;
-    if (headerMySecret) {
-      headerMySecret.textContent = secret;
-    }
+    updateSecretDisplays();
+
     if (window.soundManager) window.soundManager.playSuccess();
     showToast('Secret code locked in!', 'success');
     btnLockSecret.textContent = '✅ Locked In';
@@ -790,17 +959,17 @@
      ========================================================================== */
   function startGamePhase(data) {
     if (state.gameState === 'game') return; // Prevent double transition
+    const count = state.roomConfig.digitCount;
     state.guesses.my = [];
     state.guesses.opp = [];
-    state.guessDigits = [];
+    state.guessDigits = new Array(count).fill('');
+    state.activeBoxIndex = 0;
     state.seenGuesses = new Set();
 
     // Header info
     gameCodeChip.textContent = state.roomCode;
     gameModeChip.textContent = state.roomConfig.mode === 'exact' ? 'Exact' : 'Bulls & Cows';
-    if (headerMySecret) {
-      headerMySecret.textContent = state.mySecret || '----';
-    }
+    updateSecretDisplays();
 
     // Digit Tracker switched off by default
     if (scratchpadPanel) {
@@ -825,7 +994,7 @@
     specialNoticeBanner.classList.add('hidden');
     specialNoticeBanner.textContent = '';
 
-    renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
+    renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
     renderNumpad(gameNumpad);
 
     if (state.scratchpad) state.scratchpad.reset();
@@ -836,13 +1005,11 @@
 
   function updateTurnUI(activePlayerIndex) {
     state.isMyTurn = activePlayerIndex === state.playerIndex;
-    if (btnSubmitGuess) {
-      btnSubmitGuess.disabled = !state.isMyTurn || state.guessDigits.length !== state.roomConfig.digitCount;
-    }
+    updateSubmitButtonState();
 
-    // Toggle numpad button responsiveness
+    // Numpad is ALWAYS active so the player can key in numbers anytime (even during opponent's turn)
     gameNumpad.querySelectorAll('button').forEach(b => {
-      b.disabled = !state.isMyTurn;
+      b.disabled = false;
     });
 
     if (state.isMyTurn) {
@@ -853,33 +1020,52 @@
     } else {
       turnBanner.className = 'turn-banner opp-turn slim-turn-banner';
       turnBannerIcon.textContent = '⏳';
-      turnBannerText.textContent = `Opponent's Turn... Thinking`;
+      turnBannerText.textContent = `Opponent's Turn... Key in your next guess`;
     }
   }
 
-  function validateGuessInput() {
+  function updateSubmitButtonState() {
+    if (!btnSubmitGuess) return;
     const count = state.roomConfig.digitCount;
-    const isFull = state.guessDigits.length === count;
-    if (btnSubmitGuess) {
-      btnSubmitGuess.disabled = !state.isMyTurn || !isFull;
+    const filledCount = state.guessDigits.filter(d => d !== '').length;
+    const isFull = filledCount === count;
+
+    if (!isFull) {
+      btnSubmitGuess.disabled = true;
+      const remaining = count - filledCount;
+      btnSubmitGuess.textContent = `Enter ${remaining} Digit${remaining > 1 ? 's' : ''}`;
+    } else if (!state.isMyTurn) {
+      btnSubmitGuess.disabled = true;
+      btnSubmitGuess.textContent = `Opponent's Turn...`;
+    } else {
+      btnSubmitGuess.disabled = false;
+      btnSubmitGuess.textContent = `🚀 Submit Guess`;
     }
   }
 
   async function submitCurrentGuess() {
     if (!state.isMyTurn) return;
+    const count = state.roomConfig.digitCount;
+    const filledCount = state.guessDigits.filter(d => d !== '').length;
+    if (filledCount !== count) return;
 
     const guess = state.guessDigits.join('');
-    if (btnSubmitGuess) btnSubmitGuess.disabled = true;
+    if (btnSubmitGuess) {
+      btnSubmitGuess.disabled = true;
+      btnSubmitGuess.textContent = 'Submitting...';
+    }
 
     // Immediately clear guess inputs
-    state.guessDigits = [];
-    renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
+    state.guessDigits = new Array(count).fill('');
+    state.activeBoxIndex = 0;
+    renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
+    updateSubmitButtonState();
 
     const res = await window.socketClient.submitGuess(guess);
     if (!res.success) {
       showToast(res.error || 'Failed to submit guess', 'error');
       if (window.soundManager) window.soundManager.playError();
-      if (btnSubmitGuess) btnSubmitGuess.disabled = false;
+      updateSubmitButtonState();
       return;
     }
 
@@ -1179,8 +1365,10 @@
     statRounds.textContent = totalRounds;
     statGuesses.textContent = state.guesses.my.length;
 
+    state.opponentRematchRequested = false;
     rematchWaitingNotice.classList.add('hidden');
     btnPlayAgain.disabled = false;
+    btnPlayAgain.classList.remove('btn-pulse');
     btnPlayAgain.textContent = '🔄 Play Again (Rematch)';
 
     // Populate Match Review Breakdown
@@ -1192,13 +1380,25 @@
 
   async function requestRematch() {
     btnPlayAgain.disabled = true;
+    btnPlayAgain.classList.remove('btn-pulse');
     btnPlayAgain.textContent = 'Waiting for opponent...';
     rematchWaitingNotice.classList.remove('hidden');
 
-    const res = await window.socketClient.requestRematch();
+    const res = await window.socketClient.requestRematch({
+      roomConfig: {
+        digitCount: state.roomConfig.digitCount,
+        mode: state.roomConfig.mode,
+        allowDuplicates: state.roomConfig.allowDuplicates,
+        timerEnabled: state.roomConfig.timerEnabled,
+        timerSeconds: state.roomConfig.timerSeconds
+      }
+    });
+
     if (!res.success) {
       showToast(res.error || 'Failed to request rematch', 'error');
       btnPlayAgain.disabled = false;
+      btnPlayAgain.textContent = '🔄 Play Again (Rematch)';
+      rematchWaitingNotice.classList.add('hidden');
     }
   }
 
@@ -1262,12 +1462,24 @@
 
     window.socketClient.on('rematch_started', (data) => {
       showToast('Rematch started! Pick your secret numbers.', 'success');
+      state.opponentRematchRequested = false;
+      if (data.roomConfig) {
+        state.roomConfig = { ...state.roomConfig, ...data.roomConfig };
+      }
       startSetupPhase(data.players);
     });
 
     window.socketClient.on('rematch_requested_notice', (data) => {
       if (data.playerIndex !== state.playerIndex) {
-        showToast(`${data.playerName} wants a rematch!`, 'info');
+        state.opponentRematchRequested = true;
+        if (data.roomConfig) {
+          state.roomConfig = { ...state.roomConfig, ...data.roomConfig };
+        }
+        const modeLabel = state.roomConfig.mode === 'exact' ? 'Exact' : 'Bulls & Cows';
+        btnPlayAgain.disabled = false;
+        btnPlayAgain.innerHTML = `⚡ Accept Rematch (${data.playerName})<br><small style="font-size: 0.72rem; opacity: 0.9;">${state.roomConfig.digitCount}D • ${modeLabel}</small>`;
+        btnPlayAgain.classList.add('btn-pulse');
+        showToast(`${data.playerName} requested a rematch (${state.roomConfig.digitCount} Digits, ${modeLabel})! Tap Accept Rematch to start!`, 'info', 6000);
       }
     });
 

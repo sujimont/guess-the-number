@@ -40,34 +40,49 @@ class SocketClient {
     this.handlers[event] = callback;
   }
 
-  createRoom(payload) {
+  emitWithAck(event, data) {
     return new Promise((resolve) => {
-      this.socket.emit('create_room', payload, resolve);
+      const send = () => {
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          resolve({ success: false, error: 'Connection timed out. Please check your internet connection.' });
+        }, 8000);
+
+        this.socket.emit(event, data, (response) => {
+          if (!timedOut) {
+            clearTimeout(timer);
+            resolve(response || { success: true });
+          }
+        });
+      };
+
+      if (this.socket.connected) {
+        send();
+      } else {
+        this.socket.once('connect', send);
+      }
     });
+  }
+
+  createRoom(payload) {
+    return this.emitWithAck('create_room', payload);
   }
 
   joinRoom(payload) {
-    return new Promise((resolve) => {
-      this.socket.emit('join_room', payload, resolve);
-    });
+    return this.emitWithAck('join_room', payload);
   }
 
   setSecret(secret) {
-    return new Promise((resolve) => {
-      this.socket.emit('set_secret', { secret }, resolve);
-    });
+    return this.emitWithAck('set_secret', { secret });
   }
 
   submitGuess(guess) {
-    return new Promise((resolve) => {
-      this.socket.emit('submit_guess', { guess }, resolve);
-    });
+    return this.emitWithAck('submit_guess', { guess });
   }
 
-  requestRematch() {
-    return new Promise((resolve) => {
-      this.socket.emit('request_rematch', resolve);
-    });
+  requestRematch(payload) {
+    return this.emitWithAck('request_rematch', payload || {});
   }
 }
 
