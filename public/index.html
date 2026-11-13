@@ -238,79 +238,80 @@
 
       <!-- SCREEN 4: Active Game Board -->
       <section id="screen-game" class="screen">
-        <!-- Game Top Status Bar -->
-        <div class="game-top-bar">
+        <!-- Compact Game Status Bar -->
+        <div class="game-top-bar compact">
           <div class="game-info-chips">
-            <span class="chip chip-code">Code: <b id="game-code-chip">------</b></span>
-            <span class="chip chip-mode" id="game-mode-chip">Exact Matches</span>
+            <span class="chip chip-code"><b id="game-code-chip">------</b></span>
+            <span class="chip chip-mode" id="game-mode-chip">Exact</span>
           </div>
 
-          <div class="timer-container" id="game-timer-container">
-            <div class="timer-ring">
-              <span id="timer-text">90</span>s
+          <div class="header-right-tools">
+            <div class="timer-container" id="game-timer-container" style="display: none;">
+              <div class="timer-ring">
+                <span id="timer-text">90</span>s
+              </div>
             </div>
+            <button type="button" id="btn-toggle-scratchpad" class="btn-tool-toggle" title="Toggle Digit Tracker">
+              📝 Tracker
+            </button>
           </div>
         </div>
 
-        <!-- Turn Announcement Banner -->
-        <div id="turn-banner" class="turn-banner my-turn">
+        <!-- Ultra-Slim Turn Banner -->
+        <div id="turn-banner" class="turn-banner my-turn slim-turn-banner">
           <span id="turn-banner-icon">🎯</span>
-          <span id="turn-banner-text">Your Turn! Guess opponent's number</span>
+          <span id="turn-banner-text">Your Turn!</span>
         </div>
 
         <!-- Equal Turn / Critical Alert Banner -->
         <div id="special-notice-banner" class="special-banner hidden"></div>
 
-        <!-- History Boards: Desktop side-by-side / Mobile tabbed -->
-        <div class="boards-container">
-          <div class="boards-mobile-tabs">
-            <button type="button" class="tab-btn active" id="tab-my-board">
-              My Guesses <span class="tab-count" id="count-my-guesses">0</span>
-            </button>
-            <button type="button" class="tab-btn" id="tab-opp-board">
-              Opponent's Guesses <span class="tab-count" id="count-opp-guesses">0</span>
-            </button>
-          </div>
-
+        <!-- History Boards: Side-by-side on all screens -->
+        <div class="boards-container compact-boards">
           <!-- My Guesses Board -->
           <div class="board-column active" id="board-my">
             <div class="board-column-header">
-              <h3>🎯 My Guesses</h3>
-              <span class="board-subtitle">Cracking opponent's code</span>
+              <div class="col-header-left">
+                <span class="col-title">🎯 My Guesses</span>
+              </div>
+              <span class="tab-count" id="count-my-guesses">0</span>
             </div>
             <div class="history-list" id="my-history-list">
-              <div class="empty-history-placeholder">No guesses made yet. Make your first guess below!</div>
+              <div class="empty-history-placeholder">No guesses yet</div>
             </div>
           </div>
 
           <!-- Opponent's Guesses Board -->
-          <div class="board-column" id="board-opp">
+          <div class="board-column active" id="board-opp">
             <div class="board-column-header">
-              <h3>🛡️ Opponent's Guesses</h3>
-              <span class="board-subtitle">Attacking your code</span>
+              <div class="col-header-left">
+                <span class="col-title">🛡️ Opponent</span>
+                <span class="chip-secret-inline" title="Opponent is trying to guess this code">My Code: <b id="header-my-secret">----</b></span>
+              </div>
+              <span class="tab-count" id="count-opp-guesses">0</span>
             </div>
             <div class="history-list" id="opp-history-list">
-              <div class="empty-history-placeholder">Opponent hasn't made any guesses yet.</div>
+              <div class="empty-history-placeholder">No guesses yet</div>
             </div>
           </div>
         </div>
 
-        <!-- Interactive Digit Deduction Scratchpad -->
-        <div class="scratchpad-wrapper">
+        <!-- Interactive Digit Deduction Scratchpad (Hidden by default!) -->
+        <div class="scratchpad-wrapper hidden" id="scratchpad-panel">
           <div class="scratchpad-header">
             <div>
-              <span class="scratchpad-title">📝 Digit Tracker</span>
-              <span class="scratchpad-hint">Tap to mark: ⚪ Neutral → 🟢 Likely → 🔴 Ruled Out</span>
+              <span class="scratchpad-title">📝 Tracker</span>
+              <span class="scratchpad-hint">⚪ Neutral → 🟢 Likely → 🔴 Ruled Out</span>
             </div>
-            <button id="btn-clear-scratchpad" class="btn-text-small">Reset All</button>
+            <button id="btn-clear-scratchpad" class="btn-text-small">Reset</button>
           </div>
           <div class="scratchpad-keys" id="scratchpad-keys">
             <!-- 0 through 9 keys -->
           </div>
         </div>
 
-        <!-- Guess Input Area & Mobile Numpad (Auto-submits on final digit!) -->
-        <div class="guess-input-panel" id="guess-input-panel">
+        <!-- Guess Input Area & Compact Numpad (Auto-submits on final digit!) -->
+        <div class="guess-input-panel compact" id="guess-input-panel">
           <div class="guess-input-row">
             <div class="digit-boxes-container compact" id="guess-boxes">
               <!-- Dynamically populated guess boxes -->

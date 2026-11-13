@@ -28,7 +28,8 @@
       opp: []
     },
     scratchpad: null,
-    isCreatingAi: false
+    isCreatingAi: false,
+    seenGuesses: new Set()
   };
 
   // DOM Elements
@@ -79,6 +80,9 @@
   // Game Screen Elements
   const gameCodeChip = document.getElementById('game-code-chip');
   const gameModeChip = document.getElementById('game-mode-chip');
+  const headerMySecret = document.getElementById('header-my-secret');
+  const btnToggleScratchpad = document.getElementById('btn-toggle-scratchpad');
+  const scratchpadPanel = document.getElementById('scratchpad-panel');
   const gameTimerContainer = document.getElementById('game-timer-container');
   const timerText = document.getElementById('timer-text');
   const turnBanner = document.getElementById('turn-banner');
@@ -125,8 +129,8 @@
     initNameInput();
     initScratchpad();
     initSegmentedControls();
-    initModals();
     initSocketHandlers();
+    initModals();
     initMobileKeyboardBridge();
     checkUrlForRoom();
   }
@@ -209,12 +213,23 @@
 
   function initScratchpad() {
     state.scratchpad = new window.DigitScratchpad('scratchpad-keys');
-    btnClearScratchpad.addEventListener('click', () => {
-      if (state.scratchpad) {
-        state.scratchpad.reset();
-        if (window.soundManager) window.soundManager.playDelete();
-      }
-    });
+    if (btnClearScratchpad) {
+      btnClearScratchpad.addEventListener('click', () => {
+        if (state.scratchpad) {
+          state.scratchpad.reset();
+          if (window.soundManager) window.soundManager.playDelete();
+        }
+      });
+    }
+
+    if (btnToggleScratchpad && scratchpadPanel) {
+      btnToggleScratchpad.addEventListener('click', () => {
+        scratchpadPanel.classList.toggle('hidden');
+        const isVisible = !scratchpadPanel.classList.contains('hidden');
+        btnToggleScratchpad.classList.toggle('active', isVisible);
+        if (window.soundManager) window.soundManager.playTap();
+      });
+    }
   }
 
   /* ==========================================================================
@@ -398,32 +413,36 @@
       location.reload();
     });
 
-    // Mobile Board Tabs
-    tabMyBoard.addEventListener('click', () => {
-      tabMyBoard.classList.add('active');
-      tabOppBoard.classList.remove('active');
-      boardMy.classList.add('active');
-      boardOpp.classList.remove('active');
-      if (window.soundManager) window.soundManager.playTap();
-    });
+    // Mobile Board Tabs (if present)
+    if (tabMyBoard && tabOppBoard) {
+      tabMyBoard.addEventListener('click', () => {
+        tabMyBoard.classList.add('active');
+        tabOppBoard.classList.remove('active');
+        boardMy.classList.add('active');
+        boardOpp.classList.remove('active');
+        if (window.soundManager) window.soundManager.playTap();
+      });
 
-    tabOppBoard.addEventListener('click', () => {
-      tabOppBoard.classList.add('active');
-      tabMyBoard.classList.remove('active');
-      boardOpp.classList.add('active');
-      boardMy.classList.remove('active');
-      if (window.soundManager) window.soundManager.playTap();
-    });
+      tabOppBoard.addEventListener('click', () => {
+        tabOppBoard.classList.add('active');
+        tabMyBoard.classList.remove('active');
+        boardOpp.classList.add('active');
+        boardMy.classList.remove('active');
+        if (window.soundManager) window.soundManager.playTap();
+      });
+    }
 
     // Lock in Secret Button
     btnLockSecret.addEventListener('click', () => {
       submitSecretNumber();
     });
 
-    // Submit Guess Button
-    btnSubmitGuess.addEventListener('click', () => {
-      submitCurrentGuess();
-    });
+    // Submit Guess Button (if present)
+    if (btnSubmitGuess) {
+      btnSubmitGuess.addEventListener('click', () => {
+        submitCurrentGuess();
+      });
+    }
 
     // Play Again Button
     btnPlayAgain.addEventListener('click', () => {
@@ -612,12 +631,6 @@
       }
     } else if ((state.gameState === 'game' || state.gameState === 'playing') && state.isMyTurn) {
       if (state.guessDigits.length < state.roomConfig.digitCount) {
-        if (!state.roomConfig.allowDuplicates && state.guessDigits.includes(digit)) {
-          showToast('Duplicate digits not allowed', 'error', 1500);
-          if (window.soundManager) window.soundManager.playError();
-          return;
-        }
-
         state.guessDigits.push(digit);
         if (window.soundManager) window.soundManager.playDigit();
         renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
@@ -626,7 +639,7 @@
         if (state.guessDigits.length === state.roomConfig.digitCount) {
           setTimeout(() => {
             submitCurrentGuess();
-          }, 120);
+          }, 100);
         }
       }
     }
@@ -715,6 +728,9 @@
     }
 
     state.mySecret = secret;
+    if (headerMySecret) {
+      headerMySecret.textContent = secret;
+    }
     if (window.soundManager) window.soundManager.playSuccess();
     showToast('Secret code locked in!', 'success');
     btnLockSecret.textContent = '✅ Locked In';
@@ -736,10 +752,22 @@
     state.guesses.my = [];
     state.guesses.opp = [];
     state.guessDigits = [];
+    state.seenGuesses = new Set();
 
     // Header info
     gameCodeChip.textContent = state.roomCode;
-    gameModeChip.textContent = state.roomConfig.mode === 'exact' ? 'Exact Matches' : 'Bulls & Cows';
+    gameModeChip.textContent = state.roomConfig.mode === 'exact' ? 'Exact' : 'Bulls & Cows';
+    if (headerMySecret) {
+      headerMySecret.textContent = state.mySecret || '----';
+    }
+
+    // Digit Tracker switched off by default
+    if (scratchpadPanel) {
+      scratchpadPanel.classList.add('hidden');
+    }
+    if (btnToggleScratchpad) {
+      btnToggleScratchpad.classList.remove('active');
+    }
 
     if (state.roomConfig.timerEnabled) {
       gameTimerContainer.style.display = 'flex';
@@ -748,8 +776,8 @@
       gameTimerContainer.style.display = 'none';
     }
 
-    myHistoryList.innerHTML = '<div class="empty-history-placeholder">No guesses made yet. Make your first guess below!</div>';
-    oppHistoryList.innerHTML = '<div class="empty-history-placeholder">Opponent hasn\'t made any guesses yet.</div>';
+    myHistoryList.innerHTML = '<div class="empty-history-placeholder">No guesses yet</div>';
+    oppHistoryList.innerHTML = '<div class="empty-history-placeholder">No guesses yet</div>';
     countMyGuesses.textContent = '0';
     countOppGuesses.textContent = '0';
 
@@ -777,12 +805,12 @@
     });
 
     if (state.isMyTurn) {
-      turnBanner.className = 'turn-banner my-turn';
+      turnBanner.className = 'turn-banner my-turn slim-turn-banner';
       turnBannerIcon.textContent = '🎯';
       turnBannerText.textContent = 'Your Turn! Guess opponent\'s number';
       if (window.soundManager) window.soundManager.playTurn();
     } else {
-      turnBanner.className = 'turn-banner opp-turn';
+      turnBanner.className = 'turn-banner opp-turn slim-turn-banner';
       turnBannerIcon.textContent = '⏳';
       turnBannerText.textContent = `Opponent's Turn... Thinking`;
     }
@@ -802,6 +830,10 @@
     const guess = state.guessDigits.join('');
     if (btnSubmitGuess) btnSubmitGuess.disabled = true;
 
+    // Immediately clear guess inputs
+    state.guessDigits = [];
+    renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
+
     const res = await window.socketClient.submitGuess(guess);
     if (!res.success) {
       showToast(res.error || 'Failed to submit guess', 'error');
@@ -810,19 +842,30 @@
       return;
     }
 
-    // Reset current guess input
-    state.guessDigits = [];
-    renderDigitBoxes(guessBoxesContainer, state.roomConfig.digitCount, state.guessDigits);
+    // Instantly display guess on our board without waiting for broadcast
+    if (res.guessRecord) {
+      addGuessToBoard(res.guessRecord);
+    }
   }
 
   function addGuessToBoard(guessRecord) {
+    if (!guessRecord) return;
+
+    // Deduplication check
+    const guessKey = `${guessRecord.playerIndex}_${guessRecord.turnNumber}_${guessRecord.guess}`;
+    if (!state.seenGuesses) state.seenGuesses = new Set();
+    if (state.seenGuesses.has(guessKey)) {
+      return;
+    }
+    state.seenGuesses.add(guessKey);
+
     const isMine = guessRecord.playerIndex === state.playerIndex;
     const targetList = isMine ? myHistoryList : oppHistoryList;
     const countBadge = isMine ? countMyGuesses : countOppGuesses;
     const listArray = isMine ? state.guesses.my : state.guesses.opp;
 
     listArray.push(guessRecord);
-    countBadge.textContent = listArray.length;
+    if (countBadge) countBadge.textContent = listArray.length;
 
     // Clear empty placeholder
     const placeholder = targetList.querySelector('.empty-history-placeholder');

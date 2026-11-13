@@ -176,17 +176,17 @@ function processGuess(room, playerIndex, guess) {
         message: `${room.players[0].name} cracked the code! ${room.players[1].name} has one final turn to equalize!`
       });
       advanceTurn(room);
-      return;
+      return guessRecord;
     } else {
       // Player 2 cracked code!
       if (room.firstWinnerIndex === 0) {
         // Both cracked in equal turns -> Draw!
         endGame(room, 'draw', 'Both players cracked the code in equal turns! It is a Draw!');
-        return;
+        return guessRecord;
       } else {
         // Player 2 cracked it first (Player 1 already missed in this round) -> Player 2 wins!
         endGame(room, 'player1', `${room.players[1].name} wins!`);
-        return;
+        return guessRecord;
       }
     }
   }
@@ -195,11 +195,12 @@ function processGuess(room, playerIndex, guess) {
   if (room.firstWinnerIndex === 0 && playerIndex === 1) {
     // Player 2 failed their final equal turn -> Player 1 wins!
     endGame(room, 'player0', `${room.players[0].name} wins!`);
-    return;
+    return guessRecord;
   }
 
   // Continue to next turn
   advanceTurn(room);
+  return guessRecord;
 }
 
 /**
@@ -482,13 +483,14 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'It is not your turn.' });
       }
 
-      const val = validateNumber(guess, room.digitCount, room.allowDuplicates);
+      // Guesses are NEVER restricted to unique digits even in unique mode!
+      const val = validateNumber(guess, room.digitCount, true);
       if (!val.valid) {
         return callback({ success: false, error: val.error });
       }
 
-      callback({ success: true });
-      processGuess(room, pIdx, guess);
+      const guessRecord = processGuess(room, pIdx, guess);
+      callback({ success: true, guessRecord });
     } catch (err) {
       callback({ success: false, error: err.message });
     }
