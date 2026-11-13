@@ -14,8 +14,8 @@
       digitCount: 4,
       mode: 'bulls_and_cows',
       allowDuplicates: false,
-      timerEnabled: true,
-      timerSeconds: 90,
+      timerEnabled: false,
+      timerSeconds: 0,
       isAiGame: false
     },
     gameState: 'home', // 'home' | 'waiting' | 'setup' | 'game' | 'gameover'
@@ -519,6 +519,7 @@
     state.secretDigits = [];
     state.mySecret = null;
     btnLockSecret.disabled = true;
+    btnLockSecret.textContent = '🔒 Lock In Secret Number';
     secretValidationMsg.textContent = '';
     secretValidationMsg.className = 'validation-msg';
 
@@ -720,12 +721,18 @@
 
     // Disable numpad in setup
     setupNumpad.querySelectorAll('button').forEach(b => b.disabled = true);
+
+    // Instant transition if server started game (e.g. AI mode)
+    if (res.gameStarted && res.gameStartedData) {
+      startGamePhase(res.gameStartedData);
+    }
   }
 
   /* ==========================================================================
      Active Game Phase
      ========================================================================== */
   function startGamePhase(data) {
+    if (state.gameState === 'game') return; // Prevent double transition
     state.guesses.my = [];
     state.guesses.opp = [];
     state.guessDigits = [];

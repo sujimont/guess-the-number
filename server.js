@@ -271,8 +271,8 @@ io.on('connection', (socket) => {
         digitCount = 4,
         mode = 'bulls_and_cows',
         allowDuplicates = false,
-        timerEnabled = true,
-        timerSeconds = 90,
+        timerEnabled = false,
+        timerSeconds = 0,
         isAiGame = false
       } = data;
 
@@ -284,8 +284,8 @@ io.on('connection', (socket) => {
         mode: mode === 'exact' ? 'exact' : 'bulls_and_cows',
         allowDuplicates: Boolean(allowDuplicates),
         timerEnabled: Boolean(timerEnabled),
-        timerSeconds: Number(timerSeconds) || 90,
-        turnTimeRemaining: Number(timerSeconds) || 90,
+        timerSeconds: Number(timerSeconds) || 0,
+        turnTimeRemaining: Number(timerSeconds) || 0,
         timerInterval: null,
         state: isAiGame ? 'setup' : 'waiting',
         isAiGame: Boolean(isAiGame),
@@ -428,8 +428,6 @@ io.on('connection', (socket) => {
       room.players[pIdx].secret = secret;
       room.players[pIdx].isReady = true;
 
-      callback({ success: true });
-
       // Notify room about ready status without revealing secret
       io.to(room.code).emit('player_ready_update', {
         playerIndex: pIdx,
@@ -437,22 +435,33 @@ io.on('connection', (socket) => {
         allReady: room.players.every(p => p.isReady)
       });
 
+      let gameStartedPayload = null;
+
       // If both players have locked in secret, start game!
       if (room.players.length === 2 && room.players.every(p => p.isReady)) {
         room.state = 'playing';
         room.currentTurnIndex = 0;
         room.roundNumber = 1;
 
-        io.to(room.code).emit('game_started', {
+        gameStartedPayload = {
           currentTurnIndex: 0,
           roundNumber: 1,
           activePlayerName: room.players[0].name,
           timerEnabled: room.timerEnabled,
           timerSeconds: room.timerSeconds
-        });
+        };
+
+        io.to(room.code).emit('game_started', gameStartedPayload);
+        socket.emit('game_started', gameStartedPayload);
 
         startTurnTimer(room);
       }
+
+      callback({
+        success: true,
+        gameStarted: Boolean(gameStartedPayload),
+        gameStartedData: gameStartedPayload
+      });
     } catch (err) {
       callback({ success: false, error: err.message });
     }
