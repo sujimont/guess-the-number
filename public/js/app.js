@@ -68,6 +68,7 @@
   const displayRoomCode = document.getElementById('display-room-code');
   const btnCopyCode = document.getElementById('btn-copy-code');
   const btnCopyLink = document.getElementById('btn-copy-link');
+  const inviteLinkInput = document.getElementById('invite-link-input');
   const waitingRulesSummary = document.getElementById('waiting-rules-summary');
   const rosterName0 = document.getElementById('roster-name-0');
   const rosterName1 = document.getElementById('roster-name-1');
@@ -533,13 +534,16 @@
       const cleanOrigin = window.location.origin;
       const cleanPath = window.location.pathname === '/' ? '' : window.location.pathname.replace(/\/+$/, '');
       const url = `${cleanOrigin}${cleanPath}/?room=${state.roomCode}`;
+      const shareText = `Play Guess The Number with me! Tap the link to join:\n${url}`;
+
+      if (inviteLinkInput) inviteLinkInput.value = url;
 
       // Try native mobile share sheet (WhatsApp, Messages, AirDrop) if available
       if (navigator.share) {
         try {
           await navigator.share({
             title: 'Guess The Number',
-            text: `Join my Guess The Number match! Room: ${state.roomCode}`,
+            text: shareText,
             url: url
           });
           showToast('Invite link shared!', 'success');
@@ -552,12 +556,28 @@
 
       const success = await copyTextToClipboard(url);
       if (success) {
-        showToast('Direct invite link copied to clipboard!', 'success');
+        showToast('Invite link copied to clipboard!', 'success');
       } else {
-        window.prompt('Copy invite link:', url);
+        if (inviteLinkInput) {
+          inviteLinkInput.focus();
+          inviteLinkInput.select();
+        } else {
+          window.prompt('Copy invite link:', url);
+        }
       }
       if (window.soundManager) window.soundManager.playTap();
     });
+
+    if (inviteLinkInput) {
+      inviteLinkInput.addEventListener('click', async () => {
+        inviteLinkInput.select();
+        if (inviteLinkInput.value) {
+          const success = await copyTextToClipboard(inviteLinkInput.value);
+          if (success) showToast('Invite link copied!', 'success');
+          if (window.soundManager) window.soundManager.playTap();
+        }
+      });
+    }
 
     btnLeaveWaiting.addEventListener('click', () => {
       location.reload();
@@ -642,17 +662,32 @@
         const hashStr = window.location.hash.replace(/^#\/?/, '');
         const hashParams = new URLSearchParams(hashStr);
         raw = hashParams.get('room') || hashParams.get('code') || hashParams.get('r');
+        if (!raw && /^[A-Za-z0-9]{6}$/.test(hashStr.trim())) {
+          raw = hashStr.trim();
+        }
+      }
+
+      if (!raw && window.location.search) {
+        const searchStr = window.location.search.replace(/^\?/, '').trim();
+        if (/^[A-Za-z0-9]{6}$/.test(searchStr)) {
+          raw = searchStr;
+        }
       }
 
       if (!raw) {
-        const match = window.location.href.match(/[?&#](?:room|code|r)=([A-Za-z0-9]{4,8})/i);
+        const pathMatch = window.location.pathname.match(/\/(?:join|r|room)\/([A-Za-z0-9]{6})/i);
+        if (pathMatch) raw = pathMatch[1];
+      }
+
+      if (!raw) {
+        const match = window.location.href.match(/[?&#](?:room|code|r)=([A-Za-z0-9]{6})/i);
         if (match) raw = match[1];
       }
 
       if (raw) {
         const clean = raw.replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase();
-        if (clean.length >= 6) {
-          return clean.slice(0, 6);
+        if (clean.length === 6) {
+          return clean;
         }
       }
     } catch (e) {
@@ -666,26 +701,16 @@
     if (!code) return;
 
     joinCodeInput.value = code;
+    showToast(`Joining room ${code}...`, 'info', 3500);
 
-    // Clean up URL so refresh doesn't keep query param
-    try {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (e) {}
+    // Auto-join room immediately without forcing user to manually submit forms
+    await joinRoom(code);
 
-    // If player already has a name stored in this browser, AUTO-JOIN immediately!
-    if (state.playerName && state.playerName.trim()) {
-      showToast(`Joining room ${code}...`, 'info', 2500);
-      await joinRoom(code);
-    } else {
-      // First time visitor: show join modal focused on entering their name
-      const joinTitle = document.getElementById('modal-join-title');
-      if (joinTitle) joinTitle.textContent = `Join Game (${code})`;
-      if (joinPlayerNameInput) {
-        joinPlayerNameInput.value = '';
-        setTimeout(() => joinPlayerNameInput.focus(), 300);
-      }
-      modalJoin.classList.remove('hidden');
-      showToast(`Game invite found! Room: ${code}. Enter your name to join.`, 'info', 4000);
+    // Clean up URL once joined successfully
+    if (state.roomCode) {
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
     }
   }
 
@@ -727,12 +752,15 @@
   }
 
   async function joinRoom(code) {
-    const name = state.playerName || 'Player 2';
+    const name = (state.playerName && state.playerName.trim()) ? state.playerName : 'Player 2';
     const res = await window.socketClient.joinRoom({ roomCode: code, playerName: name });
 
     if (!res.success) {
-      showToast(res.error || 'Failed to join room', 'error');
+      showToast(res.error || 'Failed to join room', 'error', 4500);
       if (window.soundManager) window.soundManager.playError();
+      const joinTitle = document.getElementById('modal-join-title');
+      if (joinTitle) joinTitle.textContent = `Join Game (${code})`;
+      modalJoin.classList.remove('hidden');
       return;
     }
 
@@ -747,6 +775,11 @@
     displayRoomCode.textContent = code;
     rosterName0.textContent = players[0]?.name || 'Host';
     rosterName1.textContent = 'Waiting for friend...';
+
+    const cleanOrigin = window.location.origin;
+    const cleanPath = window.location.pathname === '/' ? '' : window.location.pathname.replace(/\/+$/, '');
+    const url = `${cleanOrigin}${cleanPath}/?room=${code}`;
+    if (inviteLinkInput) inviteLinkInput.value = url;
 
     // Update rules summary chips
     waitingRulesSummary.innerHTML = `
@@ -1564,7 +1597,8 @@
       if (state.roomCode && state.gameState !== 'home') {
         const res = await window.socketClient.joinRoom({
           roomCode: state.roomCode,
-          playerName: state.playerName
+          playerName: state.playerName,
+          playerIndex: state.playerIndex
         });
         if (res && res.success) {
           if (res.state === 'setup' && state.gameState === 'waiting') {

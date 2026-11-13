@@ -47,7 +47,7 @@ class SocketClient {
         const timer = setTimeout(() => {
           timedOut = true;
           resolve({ success: false, error: 'Connection timed out. Please check your internet connection.' });
-        }, 8000);
+        }, 15000);
 
         this.socket.emit(event, data, (response) => {
           if (!timedOut) {

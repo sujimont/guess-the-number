@@ -23,6 +23,11 @@ const PORT = process.env.PORT || 3000;
 // Serve static frontend assets
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Support direct SPA deep links for room invites
+app.get(['/join/:code', '/r/:code'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // In-memory store for active rooms
 const rooms = new Map();
 
@@ -402,30 +407,31 @@ io.on('connection', (socket) => {
 
       if (sameSocketIdx !== -1) {
         playerIndexToAssign = sameSocketIdx;
+      } else if (data.playerIndex === 0 && room.players[0]) {
+        // Explicit host reconnect
+        playerIndexToAssign = 0;
+      } else if (data.playerIndex === 1 && room.players[1]) {
+        // Explicit guest reconnect
+        playerIndexToAssign = 1;
       } else if (room.players.length === 1) {
-        // Only 1 player (Host) currently in room
-        const hostNameClean = room.players[0].name.toLowerCase();
-        if (nameClean && nameClean === hostNameClean) {
-          // Host is reconnecting!
-          playerIndexToAssign = 0;
-        } else {
-          // Guest is joining as Player 2!
-          playerIndexToAssign = null;
-        }
+        // Room currently has only Host (1 player).
+        // Any new incoming connection is Player 2 (Guest)!
+        // Do NOT match on name alone, as host and guest may both test with default/same name.
+        playerIndexToAssign = null; // Will push Player 2
       } else if (room.players.length >= 2) {
-        // Both slots exist in room
+        // Both slots exist in room - determine which slot to reconnect to
         if (nameClean && nameClean === room.players[0].name.toLowerCase()) {
           playerIndexToAssign = 0;
         } else if (nameClean && nameClean === room.players[1].name.toLowerCase()) {
           playerIndexToAssign = 1;
         } else {
-          // Check if guest slot (1) is disconnected
-          const s1 = io.sockets.sockets.get(room.players[1].id);
+          // Check disconnected sockets
           const s0 = io.sockets.sockets.get(room.players[0].id);
-          if (!s1 || !s1.connected) {
-            playerIndexToAssign = 1;
-          } else if (!s0 || !s0.connected) {
+          const s1 = io.sockets.sockets.get(room.players[1].id);
+          if (!s0 || !s0.connected) {
             playerIndexToAssign = 0;
+          } else if (!s1 || !s1.connected) {
+            playerIndexToAssign = 1;
           } else if (room.state === 'gameover' || room.state === 'setup') {
             playerIndexToAssign = 1;
           } else {
@@ -475,6 +481,11 @@ io.on('connection', (socket) => {
         guesses: [],
         rematchRequested: false
       };
+
+      // Ensure Player 2 name is distinguished if identical to Player 1
+      if (room.players[0] && player.name.toLowerCase() === room.players[0].name.toLowerCase()) {
+        player.name = `${player.name} 2`;
+      }
 
       room.players.push(player);
       room.state = 'setup'; // Both players present, move to secret selection!

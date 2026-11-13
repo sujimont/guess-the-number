@@ -170,3 +170,85 @@ test('Host background disconnect and Guest join by link flow', async () => {
     });
   });
 });
+
+test('Guest joining with identical default name is assigned slot 1 and advances to setup', async () => {
+  const port = await new Promise((resolve) => {
+    const s = server.listen(0, () => {
+      resolve(s.address().port);
+    });
+  });
+
+  const url = `http://localhost:${port}`;
+  const hostClient = ioClient(url);
+  const guestClient = ioClient(url);
+
+  await new Promise(res => hostClient.on('connect', res));
+  await new Promise(res => guestClient.on('connect', res));
+
+  // Both have default name 'Player'
+  const createRes = await new Promise(res => {
+    hostClient.emit('create_room', {
+      playerName: 'Player',
+      digitCount: 4,
+      mode: 'exact',
+      allowDuplicates: false
+    }, res);
+  });
+  assert.strictEqual(createRes.success, true);
+  assert.strictEqual(createRes.playerIndex, 0);
+
+  const roomCode = createRes.roomCode;
+
+  // Guest joins with exact same name 'Player' (e.g. opening link in 2nd tab or both default)
+  const setupPromise = new Promise(res => hostClient.on('room_ready_for_setup', res));
+
+  const joinRes = await new Promise(res => {
+    guestClient.emit('join_room', {
+      roomCode,
+      playerName: 'Player'
+    }, res);
+  });
+
+  assert.strictEqual(joinRes.success, true);
+  assert.strictEqual(joinRes.playerIndex, 1); // Slot 1 assigned!
+  assert.strictEqual(joinRes.state, 'setup'); // Advanced to setup!
+  assert.strictEqual(joinRes.players[1].name, 'Player 2'); // Disambiguated!
+
+  const setupData = await setupPromise;
+  assert.strictEqual(setupData.state, 'setup');
+  assert.strictEqual(setupData.players.length, 2);
+
+  hostClient.disconnect();
+  guestClient.disconnect();
+  rooms.clear();
+  await new Promise(res => {
+    io.close(() => {
+      server.close(res);
+    });
+  });
+});
+
+test('HTTP GET /join/:code and /r/:code serve index.html', async () => {
+  const port = await new Promise((resolve) => {
+    const s = server.listen(0, () => {
+      resolve(s.address().port);
+    });
+  });
+
+  const res1 = await fetch(`http://localhost:${port}/join/ABCD12`);
+  assert.strictEqual(res1.status, 200);
+  const text1 = await res1.text();
+  assert.match(text1, /Guess The Number/);
+
+  const res2 = await fetch(`http://localhost:${port}/r/XYZ999`);
+  assert.strictEqual(res2.status, 200);
+  const text2 = await res2.text();
+  assert.match(text2, /Guess The Number/);
+
+  rooms.clear();
+  await new Promise(res => {
+    io.close(() => {
+      server.close(res);
+    });
+  });
+});

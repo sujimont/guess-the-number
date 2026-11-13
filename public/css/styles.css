@@ -550,7 +550,35 @@ p.hero-desc {
 }
 
 .share-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 18px;
+}
+
+.invite-link-row {
+  width: 100%;
+}
+
+.invite-link-input {
+  width: 100%;
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  color: var(--primary);
+  background: var(--bg-card-subtle);
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-md);
+  text-align: center;
+  cursor: pointer;
+  user-select: all;
+  transition: all 0.2s ease;
+}
+
+.invite-link-input:hover,
+.invite-link-input:focus {
+  background: var(--bg-card);
+  border-style: solid;
+  outline: none;
 }
 
 .game-rules-summary {
