@@ -388,6 +388,36 @@
     if (window.soundManager) window.soundManager.playTap();
   }
 
+  async function copyTextToClipboard(text) {
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (err) {
+        console.warn('Clipboard write failed, attempting fallback', err);
+      }
+    }
+    if (!copied) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '0';
+        textArea.setAttribute('readonly', '');
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+    }
+    return copied;
+  }
+
   function initModals() {
     // Show modals
     btnShowCreate.addEventListener('click', () => {
@@ -402,6 +432,8 @@
 
     btnShowJoin.addEventListener('click', () => {
       modalJoin.classList.remove('hidden');
+      const joinTitle = document.getElementById('modal-join-title');
+      if (joinTitle) joinTitle.textContent = 'Join Online Game';
       if (joinPlayerNameInput) {
         joinPlayerNameInput.value = state.playerName || '';
       }
@@ -478,29 +510,53 @@
     if (joinPlayerNameInput) {
       joinPlayerNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          joinCodeInput.focus();
+          if (joinCodeInput.value.trim().length === 6) {
+            btnConfirmJoin.click();
+          } else {
+            joinCodeInput.focus();
+          }
         }
       });
     }
 
     // Copy Code / Link buttons
-    btnCopyCode.addEventListener('click', () => {
+    btnCopyCode.addEventListener('click', async () => {
       if (state.roomCode) {
-        navigator.clipboard.writeText(state.roomCode);
+        await copyTextToClipboard(state.roomCode);
         showToast(`Game code ${state.roomCode} copied!`, 'success');
         if (window.soundManager) window.soundManager.playTap();
       }
     });
 
-    btnCopyLink.addEventListener('click', () => {
-      if (state.roomCode) {
-        const cleanOrigin = window.location.origin;
-        const cleanPath = window.location.pathname.replace(/\/+$/, '');
-        const url = `${cleanOrigin}${cleanPath}/?room=${state.roomCode}`;
-        navigator.clipboard.writeText(url);
-        showToast('Direct invite link copied to clipboard!', 'success');
-        if (window.soundManager) window.soundManager.playTap();
+    btnCopyLink.addEventListener('click', async () => {
+      if (!state.roomCode) return;
+      const cleanOrigin = window.location.origin;
+      const cleanPath = window.location.pathname === '/' ? '' : window.location.pathname.replace(/\/+$/, '');
+      const url = `${cleanOrigin}${cleanPath}/?room=${state.roomCode}`;
+
+      // Try native mobile share sheet (WhatsApp, Messages, AirDrop) if available
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Guess The Number',
+            text: `Join my Guess The Number match! Room: ${state.roomCode}`,
+            url: url
+          });
+          showToast('Invite link shared!', 'success');
+          if (window.soundManager) window.soundManager.playTap();
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
       }
+
+      const success = await copyTextToClipboard(url);
+      if (success) {
+        showToast('Direct invite link copied to clipboard!', 'success');
+      } else {
+        window.prompt('Copy invite link:', url);
+      }
+      if (window.soundManager) window.soundManager.playTap();
     });
 
     btnLeaveWaiting.addEventListener('click', () => {
@@ -605,12 +661,28 @@
     return null;
   }
 
-  function checkUrlForRoom() {
+  async function checkUrlForRoom() {
     const code = extractRoomCodeFromUrl();
-    if (code) {
-      joinCodeInput.value = code;
+    if (!code) return;
+
+    joinCodeInput.value = code;
+
+    // Clean up URL so refresh doesn't keep query param
+    try {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (e) {}
+
+    // If player already has a name stored in this browser, AUTO-JOIN immediately!
+    if (state.playerName && state.playerName.trim()) {
+      showToast(`Joining room ${code}...`, 'info', 2500);
+      await joinRoom(code);
+    } else {
+      // First time visitor: show join modal focused on entering their name
+      const joinTitle = document.getElementById('modal-join-title');
+      if (joinTitle) joinTitle.textContent = `Join Game (${code})`;
       if (joinPlayerNameInput) {
-        joinPlayerNameInput.value = state.playerName || '';
+        joinPlayerNameInput.value = '';
+        setTimeout(() => joinPlayerNameInput.focus(), 300);
       }
       modalJoin.classList.remove('hidden');
       showToast(`Game invite found! Room: ${code}. Enter your name to join.`, 'info', 4000);
@@ -1485,6 +1557,21 @@
 
     window.socketClient.on('player_left', (data) => {
       showToast(data.message, 'error', 4000);
+    });
+
+    window.socketClient.on('connect', async () => {
+      // Re-attach socket to existing room if reconnecting after app switch
+      if (state.roomCode && state.gameState !== 'home') {
+        const res = await window.socketClient.joinRoom({
+          roomCode: state.roomCode,
+          playerName: state.playerName
+        });
+        if (res && res.success) {
+          if (res.state === 'setup' && state.gameState === 'waiting') {
+            startSetupPhase(res.players);
+          }
+        }
+      }
     });
   }
 

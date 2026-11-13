@@ -99,3 +99,74 @@ test('Server Rematch Flow with Parameter Change and Reconnection', async () => {
     });
   });
 });
+
+test('Host background disconnect and Guest join by link flow', async () => {
+  const port = await new Promise((resolve) => {
+    const s = server.listen(0, () => {
+      resolve(s.address().port);
+    });
+  });
+
+  const url = `http://localhost:${port}`;
+  const hostClient = ioClient(url);
+
+  await new Promise(res => hostClient.on('connect', res));
+
+  // 1. Host creates room in waiting state
+  const createRes = await new Promise(res => {
+    hostClient.emit('create_room', {
+      playerName: 'HostAlice',
+      digitCount: 4,
+      mode: 'exact',
+      allowDuplicates: false
+    }, res);
+  });
+  assert.strictEqual(createRes.success, true);
+  const roomCode = createRes.roomCode;
+
+  // 2. Host simulates backgrounding to send WhatsApp message -> socket disconnects
+  hostClient.disconnect();
+
+  // Give small delay to let server process disconnect
+  await new Promise(res => setTimeout(res, 50));
+
+  // Verify room STILL exists on server (NOT prematurely deleted)
+  assert.strictEqual(rooms.has(roomCode), true);
+
+  // 3. Guest joins via invite link while Host is still in background
+  const guestClient = ioClient(url);
+  await new Promise(res => guestClient.on('connect', res));
+
+  const joinRes = await new Promise(res => {
+    guestClient.emit('join_room', {
+      roomCode,
+      playerName: 'GuestBob'
+    }, res);
+  });
+  assert.strictEqual(joinRes.success, true);
+  assert.strictEqual(joinRes.playerIndex, 1);
+  assert.strictEqual(joinRes.state, 'setup');
+
+  // 4. Host switches back to browser and reconnects
+  const hostReconnected = ioClient(url);
+  await new Promise(res => hostReconnected.on('connect', res));
+
+  const hostRejoinRes = await new Promise(res => {
+    hostReconnected.emit('join_room', {
+      roomCode,
+      playerName: 'HostAlice'
+    }, res);
+  });
+  assert.strictEqual(hostRejoinRes.success, true);
+  assert.strictEqual(hostRejoinRes.playerIndex, 0); // Preserved slot 0 for host!
+  assert.strictEqual(hostRejoinRes.state, 'setup');
+
+  guestClient.disconnect();
+  hostReconnected.disconnect();
+  rooms.clear();
+  await new Promise(res => {
+    io.close(() => {
+      server.close(res);
+    });
+  });
+});

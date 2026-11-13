@@ -39,6 +39,28 @@ function generateRoomCode() {
 }
 
 /**
+ * Schedules room deletion after an inactivity timeout (15 minutes).
+ */
+function scheduleRoomCleanup(roomCode, delayMs = 15 * 60 * 1000) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+
+  room.cleanupTimeout = setTimeout(() => {
+    const currentRoom = rooms.get(roomCode);
+    if (!currentRoom) return;
+    const anyConnected = currentRoom.players.some(p => {
+      const s = io.sockets.sockets.get(p.id);
+      return s && s.connected;
+    });
+    if (!anyConnected) {
+      clearRoomTimer(currentRoom);
+      rooms.delete(roomCode);
+    }
+  }, delayMs);
+}
+
+/**
  * Clears room timer interval if active.
  */
 function clearRoomTimer(room) {
@@ -367,29 +389,44 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'Room not found. Check the code and try again.' });
       }
 
+      // If room was pending cleanup due to disconnect, cancel cleanup
+      if (room.cleanupTimeout) {
+        clearTimeout(room.cleanupTimeout);
+        room.cleanupTimeout = null;
+      }
+
       // Check if this socket or a reconnecting player is rejoining their slot
       let playerIndexToAssign = null;
       const sameSocketIdx = room.players.findIndex(p => p.id === socket.id);
+      const nameClean = (playerName || '').trim().toLowerCase();
 
       if (sameSocketIdx !== -1) {
         playerIndexToAssign = sameSocketIdx;
-      } else if (room.players.length >= 2) {
-        // 1. Find if any player slot belongs to a disconnected socket
-        const discIdx = room.players.findIndex(p => {
-          const s = io.sockets.sockets.get(p.id);
-          return !s || !s.connected;
-        });
-
-        if (discIdx !== -1) {
-          playerIndexToAssign = discIdx;
+      } else if (room.players.length === 1) {
+        // Only 1 player (Host) currently in room
+        const hostNameClean = room.players[0].name.toLowerCase();
+        if (nameClean && nameClean === hostNameClean) {
+          // Host is reconnecting!
+          playerIndexToAssign = 0;
         } else {
-          // 2. If same player name is trying to rejoin
-          const nameClean = (playerName || '').trim().toLowerCase();
-          const nameIdx = room.players.findIndex(p => p.name.toLowerCase() === nameClean);
-          if (nameIdx !== -1) {
-            playerIndexToAssign = nameIdx;
+          // Guest is joining as Player 2!
+          playerIndexToAssign = null;
+        }
+      } else if (room.players.length >= 2) {
+        // Both slots exist in room
+        if (nameClean && nameClean === room.players[0].name.toLowerCase()) {
+          playerIndexToAssign = 0;
+        } else if (nameClean && nameClean === room.players[1].name.toLowerCase()) {
+          playerIndexToAssign = 1;
+        } else {
+          // Check if guest slot (1) is disconnected
+          const s1 = io.sockets.sockets.get(room.players[1].id);
+          const s0 = io.sockets.sockets.get(room.players[0].id);
+          if (!s1 || !s1.connected) {
+            playerIndexToAssign = 1;
+          } else if (!s0 || !s0.connected) {
+            playerIndexToAssign = 0;
           } else if (room.state === 'gameover' || room.state === 'setup') {
-            // In gameover or setup phase, allow reclaiming the guest slot (player 1)
             playerIndexToAssign = 1;
           } else {
             return callback({ success: false, error: 'Room is already full.' });
@@ -636,24 +673,30 @@ io.on('connection', (socket) => {
     if (pIdx !== undefined && room.players[pIdx]) {
       const leavingPlayer = room.players[pIdx];
 
-      // If in lobby waiting, remove room if host leaves
-      if (room.state === 'waiting' && pIdx === 0) {
+      // If AI game, clean up immediately
+      if (room.isAiGame) {
         clearRoomTimer(room);
         rooms.delete(room.code);
         return;
       }
 
-      // Notify opponent
-      io.to(room.code).emit('player_left', {
-        playerIndex: pIdx,
-        playerName: leavingPlayer.name,
-        message: `${leavingPlayer.name} has disconnected.`
+      // Check if any other player in this room is currently connected
+      const anyOtherConnected = room.players.some(p => {
+        if (p.id === socket.id) return false;
+        const s = io.sockets.sockets.get(p.id);
+        return s && s.connected;
       });
 
-      // Clean up room if both left or AI game
-      if (room.isAiGame || room.players.length <= 1) {
-        clearRoomTimer(room);
-        rooms.delete(room.code);
+      if (anyOtherConnected) {
+        // Notify the remaining active player that peer disconnected temporarily
+        io.to(room.code).emit('player_left', {
+          playerIndex: pIdx,
+          playerName: leavingPlayer.name,
+          message: `${leavingPlayer.name} has temporarily disconnected.`
+        });
+      } else {
+        // Both disconnected or host in background -> schedule cleanup after 15 minutes of inactivity
+        scheduleRoomCleanup(room.code, 15 * 60 * 1000);
       }
     }
   });
