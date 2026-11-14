@@ -11,6 +11,7 @@
     playerIndex: null, // 0 for Host, 1 for Guest
     playerName: localStorage.getItem('gtn_player_name') || '',
     roomConfig: {
+      gameType: 'number', // 'number' | 'word'
       digitCount: 4,
       mode: 'exact',
       allowDuplicates: false,
@@ -30,6 +31,8 @@
       opp: []
     },
     scratchpad: null,
+    qwertyTrackerActive: false,
+    letterMarks: {}, // letter -> 'eliminated' | 'highlighted'
     isCreatingAi: false,
     isRematchConfig: false,
     seenGuesses: new Set()
@@ -259,17 +262,22 @@
   }
 
   /* ==========================================================================
-     Keyboard & Mobile Numpad Bridge
-     Handles PC physical numpad (with NumLock on/off), top number row,
-     and native mobile numeric keyboards.
+     Keyboard & Mobile Numpad / QWERTY Bridge
+     Handles physical keyboards (A-Z, 0-9, Numpad) and mobile input
      ========================================================================== */
-  function getDigitFromKeyboardEvent(e) {
-    // 1. Regular top number row (0-9)
+  function getInputCharacterFromEvent(e) {
+    if (state.roomConfig.gameType === 'word') {
+      if (e.key && /^[A-Za-z]$/.test(e.key)) {
+        return e.key.toUpperCase();
+      }
+      return null;
+    }
+
+    // Number mode
     if (e.key >= '0' && e.key <= '9') {
       return e.key;
     }
-    // 2. PC Physical Numpad (Numpad0 - Numpad9)
-    // Works whether NumLock is ON or OFF!
+    // PC Physical Numpad (Numpad0 - Numpad9)
     if (e.code && /^Numpad([0-9])$/.test(e.code)) {
       return e.code.replace('Numpad', '');
     }
@@ -277,17 +285,17 @@
   }
 
   function initMobileKeyboardBridge() {
-    // Universal Desktop & PC Keyboard Listener (Top number row + Numpad)
+    // Universal Desktop & PC Keyboard Listener
     window.addEventListener('keydown', (e) => {
       // Do not intercept if user is typing in name or join-code inputs
       if (document.activeElement === playerNameInput || document.activeElement === joinCodeInput) {
         return;
       }
 
-      const digit = getDigitFromKeyboardEvent(e);
-      if (digit !== null) {
+      const char = getInputCharacterFromEvent(e);
+      if (char !== null) {
         e.preventDefault();
-        handleDigitInput(digit);
+        handleDigitInput(char);
         return;
       }
 
@@ -312,7 +320,41 @@
   /* ==========================================================================
      Segmented Controls & Modals
      ========================================================================== */
+  function updateCreateModalLabels() {
+    const isWord = state.roomConfig.gameType === 'word';
+    const labelCodeLength = document.getElementById('label-code-length');
+    const btnDigits4 = document.getElementById('btn-digits-4');
+    const btnDigits5 = document.getElementById('btn-digits-5');
+    const modeSubExact = document.getElementById('mode-sub-exact');
+    const modeSubBulls = document.getElementById('mode-sub-bulls');
+    const labelDuplicates = document.getElementById('label-duplicates');
+    const btnDupUnique = document.getElementById('btn-dup-unique');
+    const btnDupAllowed = document.getElementById('btn-dup-allowed');
+
+    if (labelCodeLength) labelCodeLength.textContent = isWord ? 'Word Length' : 'Number of Digits';
+    if (btnDigits4) btnDigits4.textContent = isWord ? '4 Letters' : '4 Digits';
+    if (btnDigits5) btnDigits5.textContent = isWord ? '5 Letters' : '5 Digits';
+    if (modeSubExact) {
+      modeSubExact.textContent = isWord 
+        ? 'Tells how many letters are correct and in the right position'
+        : 'Tells how many digits are correct and in the right position';
+    }
+    if (modeSubBulls) {
+      modeSubBulls.textContent = isWord
+        ? 'Bulls = correct position; Cows = right letter, wrong position'
+        : 'Bulls = correct position; Cows = right digit, wrong position';
+    }
+    if (labelDuplicates) labelDuplicates.textContent = isWord ? 'Repeated Letters' : 'Repeated Digits';
+    if (btnDupUnique) btnDupUnique.textContent = isWord ? 'Unique Letters Only' : 'Unique Only (No repeats)';
+    if (btnDupAllowed) btnDupAllowed.textContent = 'Duplicates Allowed';
+  }
+
   function initSegmentedControls() {
+    setupButtonGroup('game-type-selector', (btn) => {
+      state.roomConfig.gameType = btn.dataset.gametype;
+      updateCreateModalLabels();
+    });
+
     setupButtonGroup('digits-selector', (btn) => {
       state.roomConfig.digitCount = parseInt(btn.dataset.digits, 10);
     });
@@ -354,6 +396,13 @@
   }
 
   function syncSegmentedControlsFromConfig() {
+    // Game Type
+    const typeBtns = document.querySelectorAll('#game-type-selector .segment-btn');
+    typeBtns.forEach(b => {
+      b.classList.toggle('active', b.dataset.gametype === (state.roomConfig.gameType || 'number'));
+    });
+    updateCreateModalLabels();
+
     // Digits
     const digitBtns = document.querySelectorAll('#digits-selector .segment-btn');
     digitBtns.forEach(b => {
@@ -579,6 +628,38 @@
       });
     }
 
+    // Word Mode Tracker Toolbar Buttons
+    const btnQwertyTracker = document.getElementById('btn-qwerty-tracker');
+    const trackerStatusLabel = document.getElementById('tracker-status-label');
+    const trackerHintText = document.getElementById('tracker-hint-text');
+    const btnQwertyClearTracker = document.getElementById('btn-qwerty-clear-tracker');
+
+    if (btnQwertyTracker) {
+      btnQwertyTracker.addEventListener('click', () => {
+        state.qwertyTrackerActive = !state.qwertyTrackerActive;
+        btnQwertyTracker.classList.toggle('active', state.qwertyTrackerActive);
+        if (trackerStatusLabel) {
+          trackerStatusLabel.textContent = state.qwertyTrackerActive ? 'Tracker: ON' : 'Tracker: OFF';
+        }
+        if (trackerHintText) {
+          trackerHintText.textContent = state.qwertyTrackerActive
+            ? 'Tap keys to mark (Eliminated / Highlighted)'
+            : 'Normal typing mode';
+        }
+        if (window.soundManager) window.soundManager.playTap();
+      });
+    }
+
+    if (btnQwertyClearTracker) {
+      btnQwertyClearTracker.addEventListener('click', () => {
+        state.letterMarks = {};
+        document.querySelectorAll('.qwerty-key').forEach(b => {
+          b.classList.remove('key-eliminated', 'key-highlighted');
+        });
+        if (window.soundManager) window.soundManager.playDelete();
+      });
+    }
+
     btnLeaveWaiting.addEventListener('click', () => {
       location.reload();
     });
@@ -721,6 +802,7 @@
     const name = state.playerName || (isAiGame ? 'Player' : 'Player 1');
     const payload = {
       playerName: name,
+      gameType: state.roomConfig.gameType || 'number',
       digitCount: state.roomConfig.digitCount,
       mode: state.roomConfig.mode,
       allowDuplicates: state.roomConfig.allowDuplicates,
@@ -782,10 +864,12 @@
     if (inviteLinkInput) inviteLinkInput.value = url;
 
     // Update rules summary chips
+    const isWord = state.roomConfig.gameType === 'word';
     waitingRulesSummary.innerHTML = `
-      <span class="rule-pill">${state.roomConfig.digitCount} Digits</span>
+      <span class="rule-pill">${isWord ? 'Word Game' : 'Number Game'}</span>
+      <span class="rule-pill">${state.roomConfig.digitCount} ${isWord ? 'Letters' : 'Digits'}</span>
       <span class="rule-pill">${state.roomConfig.mode === 'exact' ? 'Exact Matches' : 'Bulls & Cows'}</span>
-      <span class="rule-pill">${state.roomConfig.allowDuplicates ? 'Duplicates OK' : 'Unique Digits'}</span>
+      <span class="rule-pill">${state.roomConfig.allowDuplicates ? 'Duplicates OK' : (isWord ? 'Unique Letters' : 'Unique Digits')}</span>
       <span class="rule-pill">${state.roomConfig.timerEnabled ? state.roomConfig.timerSeconds + 's Timer' : 'No Timer'}</span>
     `;
 
@@ -800,21 +884,24 @@
 
   function startSetupPhase(players) {
     const count = state.roomConfig.digitCount;
+    const isWord = state.roomConfig.gameType === 'word';
     state.secretDigits = new Array(count).fill('');
     state.secretBoxIndex = 0;
     state.mySecret = null;
     updateSecretDisplays();
 
     btnLockSecret.disabled = true;
-    btnLockSecret.textContent = '🔒 Lock In Secret Number';
+    btnLockSecret.textContent = isWord ? '🔒 Lock In Secret Word' : '🔒 Lock In Secret Number';
     secretValidationMsg.textContent = '';
     secretValidationMsg.className = 'validation-msg';
 
-    const dupText = state.roomConfig.allowDuplicates ? 'Duplicates allowed' : 'Must be unique digits';
-    setupRulesDesc.textContent = `Pick a ${count}-digit secret code (${dupText}). Opponent will try to crack this!`;
+    const dupText = state.roomConfig.allowDuplicates ? 'Duplicates allowed' : (isWord ? 'Must be unique letters' : 'Must be unique digits');
+    setupRulesDesc.textContent = isWord
+      ? `Pick a ${count}-letter secret English word (${dupText}). Opponent will try to crack this!`
+      : `Pick a ${count}-digit secret code (${dupText}). Opponent will try to crack this!`;
 
     renderDigitBoxes(secretBoxesContainer, count, state.secretDigits, state.secretBoxIndex, onSelectSecretBox);
-    renderNumpad(setupNumpad);
+    renderKeyboard(setupNumpad);
 
     if (state.roomConfig.isAiGame) {
       setupOpponentStatus.innerHTML = `🤖 RoboGuesser has locked in its secret code!`;
@@ -827,7 +914,7 @@
   }
 
   /* ==========================================================================
-     Digit Boxes & Numpad Rendering
+     Digit Boxes & Numpad / QWERTY Keyboard Rendering
      ========================================================================== */
   function onSelectSecretBox(idx) {
     state.secretBoxIndex = idx;
@@ -863,6 +950,99 @@
 
       container.appendChild(box);
     }
+  }
+
+  function renderKeyboard(container) {
+    if (state.roomConfig.gameType === 'word') {
+      renderQwertyKeyboard(container);
+    } else {
+      renderNumpad(container);
+    }
+  }
+
+  function cycleLetterMark(letter) {
+    const current = state.letterMarks[letter] || 'none';
+    let next = 'none';
+    if (current === 'none') {
+      next = 'eliminated';
+    } else if (current === 'eliminated') {
+      next = 'highlighted';
+    } else {
+      next = 'none';
+    }
+
+    if (next === 'none') {
+      delete state.letterMarks[letter];
+    } else {
+      state.letterMarks[letter] = next;
+    }
+
+    document.querySelectorAll(`.qwerty-key[data-key="${letter}"]`).forEach(b => {
+      b.classList.remove('key-eliminated', 'key-highlighted');
+      if (next !== 'none') {
+        b.classList.add(`key-${next}`);
+      }
+    });
+
+    if (window.soundManager) window.soundManager.playTap();
+  }
+
+  function renderQwertyKeyboard(container) {
+    container.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'qwerty-keyboard';
+
+    const rows = [
+      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+      ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+      ['CLR', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
+    ];
+
+    rows.forEach(rowKeys => {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'qwerty-row';
+
+      rowKeys.forEach(k => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.key = k;
+        const isSpecial = (k === 'CLR' || k === '⌫');
+        btn.className = `qwerty-key ${isSpecial ? 'key-special' : ''}`;
+        btn.textContent = k;
+
+        if (!isSpecial && state.letterMarks[k]) {
+          btn.classList.add(`key-${state.letterMarks[k]}`);
+        }
+
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (k === 'CLR') {
+            handleClear();
+          } else if (k === '⌫') {
+            handleBackspace();
+          } else {
+            if (state.qwertyTrackerActive && (state.gameState === 'game' || state.gameState === 'playing')) {
+              cycleLetterMark(k);
+            } else {
+              handleDigitInput(k);
+            }
+          }
+        });
+
+        if (!isSpecial) {
+          btn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            cycleLetterMark(k);
+          });
+        }
+
+        rowDiv.appendChild(btn);
+      });
+
+      wrapper.appendChild(rowDiv);
+    });
+
+    container.appendChild(wrapper);
   }
 
   function renderNumpad(container) {
@@ -1006,8 +1186,11 @@
   function validateSecretInput() {
     const count = state.roomConfig.digitCount;
     const filledCount = state.secretDigits.filter(d => d !== '').length;
+    const isWord = state.roomConfig.gameType === 'word';
+    const itemLabel = isWord ? 'letter' : 'digit';
+
     if (filledCount < count) {
-      secretValidationMsg.textContent = `${count - filledCount} digit(s) remaining...`;
+      secretValidationMsg.textContent = `${count - filledCount} ${itemLabel}(s) remaining...`;
       secretValidationMsg.className = 'validation-msg';
       btnLockSecret.disabled = true;
       return;
@@ -1016,13 +1199,22 @@
     if (!state.roomConfig.allowDuplicates) {
       const set = new Set(state.secretDigits);
       if (set.size !== count) {
-        showSecretError('All digits must be unique');
+        showSecretError(`All ${itemLabel}s must be unique`);
         btnLockSecret.disabled = true;
         return;
       }
     }
 
-    secretValidationMsg.textContent = 'Valid secret number! Tap Lock In to proceed.';
+    if (isWord) {
+      const candidate = state.secretDigits.join('').toUpperCase();
+      if (window.GameDictionary && !window.GameDictionary.isValidWord(candidate, count)) {
+        showSecretError('Not a valid English word');
+        btnLockSecret.disabled = true;
+        return;
+      }
+    }
+
+    secretValidationMsg.textContent = `Valid secret ${isWord ? 'word' : 'number'}! Tap Lock In to proceed.`;
     secretValidationMsg.className = 'validation-msg success';
     btnLockSecret.disabled = false;
   }
@@ -1050,7 +1242,7 @@
     showToast('Secret code locked in!', 'success');
     btnLockSecret.textContent = '✅ Locked In';
 
-    // Disable numpad in setup
+    // Disable keyboard in setup
     setupNumpad.querySelectorAll('button').forEach(b => b.disabled = true);
 
     // Instant transition if server started game (e.g. AI mode)
@@ -1065,23 +1257,36 @@
   function startGamePhase(data) {
     if (state.gameState === 'game') return; // Prevent double transition
     const count = state.roomConfig.digitCount;
+    const isWord = state.roomConfig.gameType === 'word';
     state.guesses.my = [];
     state.guesses.opp = [];
     state.guessDigits = new Array(count).fill('');
     state.activeBoxIndex = 0;
     state.seenGuesses = new Set();
+    state.qwertyTrackerActive = false;
+    state.letterMarks = {};
 
     // Header info
     gameCodeChip.textContent = state.roomCode;
     gameModeChip.textContent = state.roomConfig.mode === 'exact' ? 'Exact' : 'Bulls & Cows';
     updateSecretDisplays();
 
-    // Digit Tracker switched off by default
-    if (scratchpadPanel) {
-      scratchpadPanel.classList.add('hidden');
-    }
-    if (btnToggleScratchpad) {
-      btnToggleScratchpad.classList.remove('active');
+    // Word Mode Letter Tracker Toolbar vs Number Digit Scratchpad
+    const wordTrackerToolbar = document.getElementById('word-tracker-toolbar');
+    if (isWord) {
+      if (btnToggleScratchpad) btnToggleScratchpad.classList.add('hidden');
+      if (scratchpadPanel) scratchpadPanel.classList.add('hidden');
+      if (wordTrackerToolbar) wordTrackerToolbar.classList.remove('hidden');
+      const statusLabel = document.getElementById('tracker-status-label');
+      if (statusLabel) statusLabel.textContent = 'Tracker: OFF';
+      const btnTracker = document.getElementById('btn-qwerty-tracker');
+      if (btnTracker) btnTracker.classList.remove('active');
+    } else {
+      if (btnToggleScratchpad) btnToggleScratchpad.classList.remove('hidden');
+      if (wordTrackerToolbar) wordTrackerToolbar.classList.add('hidden');
+      // Digit Tracker switched off by default
+      if (scratchpadPanel) scratchpadPanel.classList.add('hidden');
+      if (btnToggleScratchpad) btnToggleScratchpad.classList.remove('active');
     }
 
     if (state.roomConfig.timerEnabled) {
@@ -1100,7 +1305,7 @@
     specialNoticeBanner.textContent = '';
 
     renderDigitBoxes(guessBoxesContainer, count, state.guessDigits, state.activeBoxIndex, onSelectGuessBox);
-    renderNumpad(gameNumpad);
+    renderKeyboard(gameNumpad);
 
     if (state.scratchpad) state.scratchpad.reset();
 
@@ -1112,15 +1317,18 @@
     state.isMyTurn = activePlayerIndex === state.playerIndex;
     updateSubmitButtonState();
 
-    // Numpad is ALWAYS active so the player can key in numbers anytime (even during opponent's turn)
+    // Keyboard is ALWAYS active so the player can key in anytime
     gameNumpad.querySelectorAll('button').forEach(b => {
       b.disabled = false;
     });
 
+    const isWord = state.roomConfig.gameType === 'word';
+    const itemType = isWord ? 'word' : 'number';
+
     if (state.isMyTurn) {
       turnBanner.className = 'turn-banner my-turn slim-turn-banner';
       turnBannerIcon.textContent = '🎯';
-      turnBannerText.textContent = 'Your Turn! Guess opponent\'s number';
+      turnBannerText.textContent = `Your Turn! Guess opponent's ${itemType}`;
       if (window.soundManager) window.soundManager.playTurn();
     } else {
       turnBanner.className = 'turn-banner opp-turn slim-turn-banner';
@@ -1134,11 +1342,16 @@
     const count = state.roomConfig.digitCount;
     const filledCount = state.guessDigits.filter(d => d !== '').length;
     const isFull = filledCount === count;
+    const isWord = state.roomConfig.gameType === 'word';
+    const itemLabel = isWord ? 'Letter' : 'Digit';
 
     if (!isFull) {
       btnSubmitGuess.disabled = true;
       const remaining = count - filledCount;
-      btnSubmitGuess.textContent = `Enter ${remaining} Digit${remaining > 1 ? 's' : ''}`;
+      btnSubmitGuess.textContent = `Enter ${remaining} ${itemLabel}${remaining > 1 ? 's' : ''}`;
+    } else if (isWord && window.GameDictionary && !window.GameDictionary.isValidWord(state.guessDigits.join(''), count)) {
+      btnSubmitGuess.disabled = true;
+      btnSubmitGuess.textContent = `Not in word list`;
     } else if (!state.isMyTurn) {
       btnSubmitGuess.disabled = true;
       btnSubmitGuess.textContent = `Opponent's Turn...`;
@@ -1154,7 +1367,17 @@
     const filledCount = state.guessDigits.filter(d => d !== '').length;
     if (filledCount !== count) return;
 
-    const guess = state.guessDigits.join('');
+    const isWord = state.roomConfig.gameType === 'word';
+    const guess = state.guessDigits.join('').toUpperCase();
+
+    // In word mode, client-side validation against dictionary before emitting
+    if (isWord && window.GameDictionary && !window.GameDictionary.isValidWord(guess, count)) {
+      showToast('Not in word list', 'error');
+      if (window.soundManager) window.soundManager.playError();
+      updateSubmitButtonState();
+      return;
+    }
+
     if (btnSubmitGuess) {
       btnSubmitGuess.disabled = true;
       btnSubmitGuess.textContent = 'Submitting...';
@@ -1227,6 +1450,25 @@
     // Append in chronological order and auto-scroll to latest!
     targetList.appendChild(row);
     targetList.scrollTop = targetList.scrollHeight;
+
+    // Auto-eliminate zero-match letters in word mode for player's guesses
+    if (isMine && state.roomConfig.gameType === 'word' && guessRecord.guess) {
+      const fb = guessRecord.feedback;
+      const isZeroMatch = (fb.mode === 'exact' && fb.exact === 0) ||
+                          (fb.mode === 'bulls_and_cows' && fb.bulls === 0 && fb.cows === 0);
+      if (isZeroMatch) {
+        const letters = new Set(guessRecord.guess.toUpperCase().split(''));
+        letters.forEach(letter => {
+          if (!state.letterMarks[letter]) {
+            state.letterMarks[letter] = 'eliminated';
+            document.querySelectorAll(`.qwerty-key[data-key="${letter}"]`).forEach(b => {
+              b.classList.remove('key-highlighted');
+              b.classList.add('key-eliminated');
+            });
+          }
+        });
+      }
+    }
 
     if (isMine) {
       if (guessRecord.feedback.isWin) {
@@ -1491,6 +1733,7 @@
 
     const res = await window.socketClient.requestRematch({
       roomConfig: {
+        gameType: state.roomConfig.gameType || 'number',
         digitCount: state.roomConfig.digitCount,
         mode: state.roomConfig.mode,
         allowDuplicates: state.roomConfig.allowDuplicates,
@@ -1566,7 +1809,8 @@
     });
 
     window.socketClient.on('rematch_started', (data) => {
-      showToast('Rematch started! Pick your secret numbers.', 'success');
+      const isWord = state.roomConfig.gameType === 'word';
+      showToast('Rematch started! Pick your secret ' + (isWord ? 'words.' : 'numbers.'), 'success');
       state.opponentRematchRequested = false;
       if (data.roomConfig) {
         state.roomConfig = { ...state.roomConfig, ...data.roomConfig };
@@ -1580,11 +1824,13 @@
         if (data.roomConfig) {
           state.roomConfig = { ...state.roomConfig, ...data.roomConfig };
         }
+        const isWord = state.roomConfig.gameType === 'word';
         const modeLabel = state.roomConfig.mode === 'exact' ? 'Exact' : 'Bulls & Cows';
+        const lengthLabel = `${state.roomConfig.digitCount}${isWord ? 'L' : 'D'}`;
         btnPlayAgain.disabled = false;
-        btnPlayAgain.innerHTML = `⚡ Accept Rematch (${data.playerName})<br><small style="font-size: 0.72rem; opacity: 0.9;">${state.roomConfig.digitCount}D • ${modeLabel}</small>`;
+        btnPlayAgain.innerHTML = `⚡ Accept Rematch (${data.playerName})<br><small style="font-size: 0.72rem; opacity: 0.9;">${isWord ? 'Word' : 'Number'} • ${lengthLabel} • ${modeLabel}</small>`;
         btnPlayAgain.classList.add('btn-pulse');
-        showToast(`${data.playerName} requested a rematch (${state.roomConfig.digitCount} Digits, ${modeLabel})! Tap Accept Rematch to start!`, 'info', 6000);
+        showToast(`${data.playerName} requested a rematch (${isWord ? 'Word Game' : 'Number Game'}, ${state.roomConfig.digitCount} ${isWord ? 'Letters' : 'Digits'}, ${modeLabel})! Tap Accept Rematch to start!`, 'info', 6000);
       }
     });
 

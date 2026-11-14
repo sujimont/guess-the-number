@@ -245,9 +245,18 @@
             </button>
           </div>
 
-          <!-- Built-in Mobile Numpad -->
+          <!-- Word Mode Letter Tracker Toolbar -->
+          <div id="word-tracker-toolbar" class="word-tracker-toolbar hidden">
+            <button type="button" id="btn-qwerty-tracker" class="btn-tracker-pill" title="Toggle tracker mode to mark eliminated or suspected letters on keyboard">
+              <span>🎯</span> <span id="tracker-status-label">Tracker: OFF</span>
+            </button>
+            <span class="tracker-hint-text" id="tracker-hint-text">Type words or tap Tracker to mark keys</span>
+            <button type="button" id="btn-qwerty-clear-tracker" class="btn-tracker-clear" title="Reset all letter marks">Reset Marks</button>
+          </div>
+
+          <!-- Built-in Mobile Keyboard (Numpad or QWERTY) -->
           <div class="numpad-container compact-numpad" id="game-numpad">
-            <!-- 0-9 digits + Backspace -->
+            <!-- 0-9 digits + Backspace or QWERTY -->
           </div>
         </div>
       </section>
@@ -343,12 +352,21 @@
           </div>
           
           <div class="modal-body">
-            <!-- Digit Count Setting -->
+            <!-- Game Type Setting -->
             <div class="form-group">
-              <label>Number of Digits</label>
+              <label>Game Type</label>
+              <div class="segmented-control" id="game-type-selector">
+                <button type="button" class="segment-btn active" data-gametype="number" id="btn-type-number">🔢 Numbers</button>
+                <button type="button" class="segment-btn" data-gametype="word" id="btn-type-word">🔤 Words</button>
+              </div>
+            </div>
+
+            <!-- Digit / Letter Count Setting -->
+            <div class="form-group">
+              <label id="label-code-length">Number of Digits</label>
               <div class="segmented-control" id="digits-selector">
-                <button type="button" class="segment-btn active" data-digits="4">4 Digits</button>
-                <button type="button" class="segment-btn" data-digits="5">5 Digits</button>
+                <button type="button" class="segment-btn active" data-digits="4" id="btn-digits-4">4 Digits</button>
+                <button type="button" class="segment-btn" data-digits="5" id="btn-digits-5">5 Digits</button>
               </div>
             </div>
 
@@ -358,21 +376,21 @@
               <div class="segmented-control segmented-vertical" id="mode-selector">
                 <button type="button" class="segment-btn active" data-mode="exact">
                   <div class="btn-line-title">Exact Matches Only</div>
-                  <div class="btn-line-sub">Tells how many digits are correct and in the right position</div>
+                  <div class="btn-line-sub" id="mode-sub-exact">Tells how many digits are correct and in the right position</div>
                 </button>
                 <button type="button" class="segment-btn" data-mode="bulls_and_cows">
                   <div class="btn-line-title">Bulls & Cows</div>
-                  <div class="btn-line-sub">Bulls = correct position; Cows = right digit, wrong position</div>
+                  <div class="btn-line-sub" id="mode-sub-bulls">Bulls = correct position; Cows = right digit, wrong position</div>
                 </button>
               </div>
             </div>
 
             <!-- Repeated Digits Setting -->
             <div class="form-group">
-              <label>Repeated Digits</label>
+              <label id="label-duplicates">Repeated Digits</label>
               <div class="segmented-control" id="duplicates-selector">
-                <button type="button" class="segment-btn active" data-duplicates="false">Unique Only (No repeats)</button>
-                <button type="button" class="segment-btn" data-duplicates="true">Duplicates Allowed</button>
+                <button type="button" class="segment-btn active" data-duplicates="false" id="btn-dup-unique">Unique Only (No repeats)</button>
+                <button type="button" class="segment-btn" data-duplicates="true" id="btn-dup-allowed">Duplicates Allowed</button>
               </div>
             </div>
 
@@ -442,9 +460,10 @@
     <div id="toast-container" class="toast-container"></div>
   </div>
 
-  <!-- Audio, Deduction Scratchpad, Socket, and Application Scripts -->
+  <!-- Audio, Deduction Scratchpad, Dictionary, Socket, and Application Scripts -->
   <script src="js/sound.js"></script>
   <script src="js/scratchpad.js"></script>
+  <script src="js/dictionary.js"></script>
   <script src="js/socketClient.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -4,8 +4,11 @@ const { Server } = require('socket.io');
 const path = require('path');
 const {
   validateNumber,
+  validateInput,
   evaluateGuess,
-  generateRandomNumber
+  generateRandomNumber,
+  generateRandomSecret,
+  dictionary
 } = require('./lib/gameLogic');
 const AIOpponent = require('./lib/aiOpponent');
 
@@ -277,7 +280,8 @@ function resetRoomForRematch(room) {
     room.aiOpponent = new AIOpponent({
       digitCount: room.digitCount,
       mode: room.mode,
-      allowDuplicates: room.allowDuplicates
+      allowDuplicates: room.allowDuplicates,
+      gameType: room.gameType
     });
     room.players[1].secret = room.aiOpponent.secret;
     room.players[1].isReady = true;
@@ -286,6 +290,7 @@ function resetRoomForRematch(room) {
   io.to(room.code).emit('rematch_started', {
     state: room.state,
     roomConfig: {
+      gameType: room.gameType,
       digitCount: room.digitCount,
       mode: room.mode,
       allowDuplicates: room.allowDuplicates,
@@ -304,6 +309,7 @@ io.on('connection', (socket) => {
     try {
       const {
         playerName,
+        gameType = 'number',
         digitCount = 4,
         mode = 'bulls_and_cows',
         allowDuplicates = false,
@@ -316,6 +322,7 @@ io.on('connection', (socket) => {
       const room = {
         code,
         hostId: socket.id,
+        gameType: gameType === 'word' ? 'word' : 'number',
         digitCount: Number(digitCount) === 5 ? 5 : 4,
         mode: mode === 'exact' ? 'exact' : 'bulls_and_cows',
         allowDuplicates: Boolean(allowDuplicates),
@@ -346,7 +353,8 @@ io.on('connection', (socket) => {
         room.aiOpponent = new AIOpponent({
           digitCount: room.digitCount,
           mode: room.mode,
-          allowDuplicates: room.allowDuplicates
+          allowDuplicates: room.allowDuplicates,
+          gameType: room.gameType
         });
         room.players.push({
           id: 'ai_bot',
@@ -367,6 +375,7 @@ io.on('connection', (socket) => {
         success: true,
         roomCode: code,
         roomConfig: {
+          gameType: room.gameType,
           digitCount: room.digitCount,
           mode: room.mode,
           allowDuplicates: room.allowDuplicates,
@@ -460,6 +469,7 @@ io.on('connection', (socket) => {
           success: true,
           roomCode: cleanCode,
           roomConfig: {
+            gameType: room.gameType,
             digitCount: room.digitCount,
             mode: room.mode,
             allowDuplicates: room.allowDuplicates,
@@ -498,6 +508,7 @@ io.on('connection', (socket) => {
         success: true,
         roomCode: cleanCode,
         roomConfig: {
+          gameType: room.gameType,
           digitCount: room.digitCount,
           mode: room.mode,
           allowDuplicates: room.allowDuplicates,
@@ -536,12 +547,12 @@ io.on('connection', (socket) => {
       }
 
       // Validate secret against room rules
-      const val = validateNumber(secret, room.digitCount, room.allowDuplicates);
+      const val = validateInput(secret, room.digitCount, room.allowDuplicates, room.gameType);
       if (!val.valid) {
         return callback({ success: false, error: val.error });
       }
 
-      room.players[pIdx].secret = secret;
+      room.players[pIdx].secret = val.cleanWord || String(secret).trim().toUpperCase();
       room.players[pIdx].isReady = true;
 
       // Notify room about ready status without revealing secret
@@ -598,13 +609,15 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'It is not your turn.' });
       }
 
-      // Guesses are NEVER restricted to unique digits even in unique mode!
-      const val = validateNumber(guess, room.digitCount, true);
+      // Guesses in number mode are never restricted to unique digits even in unique mode!
+      // In word mode, guess must be a valid English word
+      const val = validateInput(guess, room.digitCount, true, room.gameType);
       if (!val.valid) {
         return callback({ success: false, error: val.error });
       }
 
-      const guessRecord = processGuess(room, pIdx, guess);
+      const cleanGuess = val.cleanWord || String(guess).trim().toUpperCase();
+      const guessRecord = processGuess(room, pIdx, cleanGuess);
       callback({ success: true, guessRecord });
     } catch (err) {
       callback({ success: false, error: err.message });
@@ -630,7 +643,8 @@ io.on('connection', (socket) => {
 
       // If the initiating player chose updated game parameters for rematch
       if (data && data.roomConfig) {
-        const { digitCount, mode, allowDuplicates, timerEnabled, timerSeconds } = data.roomConfig;
+        const { gameType, digitCount, mode, allowDuplicates, timerEnabled, timerSeconds } = data.roomConfig;
+        if (gameType) room.gameType = gameType === 'word' ? 'word' : 'number';
         if (digitCount) room.digitCount = Number(digitCount) === 5 ? 5 : 4;
         if (mode) room.mode = mode === 'exact' ? 'exact' : 'bulls_and_cows';
         if (allowDuplicates !== undefined) room.allowDuplicates = Boolean(allowDuplicates);
@@ -645,6 +659,7 @@ io.on('connection', (socket) => {
       callback({
         success: true,
         roomConfig: {
+          gameType: room.gameType,
           digitCount: room.digitCount,
           mode: room.mode,
           allowDuplicates: room.allowDuplicates,
@@ -661,6 +676,7 @@ io.on('connection', (socket) => {
           playerIndex: pIdx,
           playerName: room.players[pIdx].name,
           roomConfig: {
+            gameType: room.gameType,
             digitCount: room.digitCount,
             mode: room.mode,
             allowDuplicates: room.allowDuplicates,
